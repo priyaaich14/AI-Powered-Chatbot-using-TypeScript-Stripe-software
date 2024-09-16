@@ -1,0 +1,80 @@
+// // // {
+// // //     "compilerOptions": {
+// // //       "module": "ESNext",               // Use ES modules (import/export)
+// // //       "target": "ES6",                  // Transpile to ES6 (or higher)
+// // //       "moduleResolution": "node",       // Resolve modules in a Node.js environment
+// // //       "outDir": "./dist",               // Output directory for compiled JS files
+// // //       "rootDir": "./src",               // Root directory for TypeScript source files
+// // //       "esModuleInterop": true,          // Enables import support for CommonJS modules
+// // //       "strict": true,                   // Enable strict type-checking options
+// // //       "forceConsistentCasingInFileNames": true
+// // //     },
+// // //     "include": ["src"],                 // Include the 'src' folder
+// // //     "exclude": ["node_modules"]         // Exclude 'node_modules' folder
+// // //   }
+// // {
+// //     "compilerOptions": {
+// //       "module": "ESNext",
+// //       "target": "ES6",
+// //       "moduleResolution": "node",
+// //       "outDir": "./dist",
+// //       "rootDir": "./",                  // Root directory is now the current folder
+// //       "esModuleInterop": true,
+// //       "strict": true,
+// //       "forceConsistentCasingInFileNames": true
+// //     },
+// //     "include": ["./**/*.ts"],            // Include all .ts files from the current directory
+// //     "exclude": ["node_modules"]
+// //   }
+  
+
+// {
+//     "compilerOptions": {
+//       "module": "ESNext",             // Keep using ESNext for ES modules
+//       "target": "ES6",                // Target modern JavaScript (ES6 or above)
+//       "moduleResolution": "node",     // Node.js module resolution
+//       "outDir": "./dist",             // Output directory for compiled JS files
+//       "rootDir": "./src",             // Root directory for TypeScript source files
+//       "esModuleInterop": true,        // Allows compatibility with CommonJS modules
+//       "strict": true,                 // Enable strict type-checking options
+//       "forceConsistentCasingInFileNames": true,
+//       "skipLibCheck": true            // Skip type checks for declaration files
+//     },
+//     "include": ["./src/**/*.ts"],     // Include all TypeScript files in the src folder
+//     "exclude": ["node_modules"]
+//   }
+  
+
+
+// {
+//   "compilerOptions": {
+//     "module": "ESNext",               // Use ES modules
+//     "target": "ES6",                  // Transpile to ES6 or higher
+//     "moduleResolution": "node",       // Node.js module resolution
+//     "outDir": "./dist",               // Output directory for compiled JS files
+//     "rootDir": "./src",               // Root directory for TypeScript source files
+//     "esModuleInterop": true,          // Enables compatibility with CommonJS modules
+//     "skipLibCheck": true,             // Skip type-checking for declaration files
+//     "strict": true,                   // Enable strict type-checking
+//     "forceConsistentCasingInFileNames": true
+//   },
+//   "include": ["./src/**/*.ts"],        // Include all TypeScript files in the "src" folder
+//   "exclude": ["node_modules"]
+// }
+
+
+{
+  "compilerOptions": {
+    "module": "CommonJS",           // Revert to CommonJS
+    "target": "ES6",                // Compile to ES6 or higher
+    "moduleResolution": "node",     // Use Node module resolution
+    "outDir": "./dist",             // Output directory for compiled JS files
+    "rootDir": "./src",             // Root directory for TypeScript source files
+    "esModuleInterop": true,        // Compatibility with CommonJS modules
+    "skipLibCheck": true,           // Skip type-checking for declaration files
+    "strict": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["./src/**/*.ts"],
+  "exclude": ["node_modules"]
+}
