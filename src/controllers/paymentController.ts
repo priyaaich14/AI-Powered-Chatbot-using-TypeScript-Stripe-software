@@ -131,7 +131,7 @@
 
 
 
-//////////// USING STRIPE KEYS ///////////////////////////////
+//////// USING STRIPE KEYS ///////////////////////////////
 
 // import { Request, Response } from 'express';
 // import Stripe from 'stripe';
@@ -142,20 +142,16 @@
 //   apiVersion: '2024-06-20',
 // });
 
-
 // // Create a Payment Method
 // export const createPaymentMethod = async (req: Request, res: Response) => {
-//   const { cardNumber, expMonth, expYear, cvc } = req.body;
+//   const { paymentToken } = req.body;
 
 //   try {
-//     // Create a payment method using the card details
+//     // Create a payment method using a token (e.g., tok_visa)
 //     const paymentMethod = await stripe.paymentMethods.create({
 //       type: 'card',
 //       card: {
-//         number: cardNumber,
-//         exp_month: expMonth,
-//         exp_year: expYear,
-//         cvc: cvc,
+//         token: paymentToken,
 //       },
 //     });
 
@@ -166,39 +162,46 @@
 //   }
 // };
 
+// // Create a Subscription
 // export const createStripeSubscription = async (req: Request, res: Response) => {
-//   const { email, paymentMethodId, priceId } = req.body;
+//   const { email, paymentMethodId, priceId, name, line1, city, state, country, postal_code } = req.body;
 
 //   try {
-//     // Step 1: Create a customer in Stripe
+//     // Create a customer in Stripe
 //     const customer = await stripe.customers.create({
 //       email,
 //       payment_method: paymentMethodId,
 //       invoice_settings: {
 //         default_payment_method: paymentMethodId,
 //       },
+//       name, // Use dynamic name and address
+//       address: {
+//         line1,
+//         city,
+//         state,
+//         country,
+//         postal_code,
+//       },
 //     });
 
-//     // Step 2: Attach the payment method to the customer
+//     // Attach the payment method to the customer
 //     await stripe.paymentMethods.attach(paymentMethodId, {
 //       customer: customer.id,
 //     });
 
-//     // Step 3: Create a subscription
+//     // Create a subscription
 //     const subscription = await stripe.subscriptions.create({
 //       customer: customer.id,
 //       items: [{ price: priceId }],
-//       expand: ['latest_invoice.payment_intent'], // Ensure payment intent is included
+//       expand: ['latest_invoice.payment_intent'],
 //     });
 
-//     // Step 4: Check if latest_invoice exists and get payment intent
+//     // Check if latest_invoice exists and get payment intent
 //     const latestInvoice = subscription.latest_invoice as Stripe.Invoice;
 
 //     if (latestInvoice && latestInvoice.payment_intent) {
-//       // Safely cast the payment_intent to a Stripe.PaymentIntent
 //       const paymentIntent = latestInvoice.payment_intent as Stripe.PaymentIntent;
 
-//       // Check the payment intent status
 //       if (paymentIntent.status === 'requires_payment_method') {
 //         return res.status(400).json({
 //           error: 'Payment was declined. Please use a different payment method or try again.',
@@ -208,30 +211,18 @@
 //       }
 //     }
 
-//     // Step 5: Respond with the subscription details
 //     res.json({ subscription });
 //   } catch (error: any) {
 //     console.error('Error creating subscription:', error);
-
-//     // Check if it's a Stripe error and handle it accordingly
-//     if (error.type === 'StripeCardError' || error.type === 'StripeInvalidRequestError') {
-//       return res.status(400).json({
-//         error: 'Payment failed due to invalid card or request.',
-//         message: error.message,
-//       });
-//     }
-
-//     // Handle other errors
 //     res.status(500).json({ error: 'Error creating subscription', message: error.message });
 //   }
 // };
 
-
+// // Cancel a Subscription
 // export const cancelStripeSubscription = async (req: Request, res: Response) => {
 //   const { subscriptionId } = req.body;
 
 //   try {
-//     // Cancel the subscription
 //     const canceledSubscription = await stripe.subscriptions.cancel(subscriptionId);
 
 //     // Optionally, update the subscription status in your database
@@ -248,85 +239,18 @@
 // };
 
 
-// // export const handleStripeWebhook = async (req: Request, res: Response) => {
-// //   const sig = req.headers['stripe-signature'] as string;
-// //   let event: Stripe.Event;
-
-// //   try {
-// //     event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET!);
-// //   } catch (err) {
-// //     console.error(`⚠️  Webhook signature verification failed.`, err);
-// //     return res.sendStatus(400);
-// //   }
-
-// //   if (event.type === 'invoice.payment_failed') {
-// //     const invoice = event.data.object as Stripe.Invoice;
-
-// //     // Check if payment_intent is available and its type
-// //     const paymentIntentId = typeof invoice.payment_intent === 'string' ? invoice.payment_intent : invoice.payment_intent?.id;
-
-// //     // Process payment failure
-// //     if (paymentIntentId) {
-// //       // Update payment status in your database
-// //       await Payment.findOneAndUpdate(
-// //         { transactionId: invoice.id },
-// //         { status: 'failed' }
-// //       );
-
-// //       console.log(`Payment failed for invoice: ${invoice.id}, paymentIntent: ${paymentIntentId}`);
-// //     }
-// //   }
-
-// //   res.json({ received: true });
-// // };
-
-// // Handle Stripe Webhook
-// export const handleStripeWebhook = async (req: Request, res: Response) => {
-//   const sig = req.headers['stripe-signature'] as string;
-//   let event: Stripe.Event;
-
-//   try {
-//     // Pass the raw body to Stripe's constructEvent function
-//     event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET!);
-//   } catch (err) {
-//     if (err instanceof Error) {
-//       console.error(`⚠️  Webhook signature verification failed: ${err.message}`);
-//     }
-//     return res.sendStatus(400); // Bad Request
-//   }
-
-//   // Handle specific event types
-//   if (event.type === 'invoice.payment_failed') {
-//     const invoice = event.data.object as Stripe.Invoice;
-
-//     // Check if payment_intent is available and its type
-//     const paymentIntentId = typeof invoice.payment_intent === 'string' ? invoice.payment_intent : invoice.payment_intent?.id;
-
-//     // Log payment failure event
-//     if (paymentIntentId) {
-//       // Update payment status in your database
-//       await Payment.findOneAndUpdate(
-//         { transactionId: invoice.id },
-//         { status: 'failed' }
-//       );
-//       console.log(`Payment failed for invoice: ${invoice.id}, paymentIntent: ${paymentIntentId}`);
-//     }
-//   }
-
-//   res.json({ received: true });
-// };
-
+///////////////////////////////////////////
 
 import { Request, Response } from 'express';
 import Stripe from 'stripe';
-import Payment from '../models/Payment';
 import Subscription from '../models/Subscription';
+import { IAuthRequest } from '../middlewares/auth'; // Importing IAuthRequest from your authController
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-06-20',
+  apiVersion: '2024-06-20', // Ensure you're using the correct Stripe API version
 });
 
-// Create a Payment Method
+// Create Payment Method
 export const createPaymentMethod = async (req: Request, res: Response) => {
   const { paymentToken } = req.body;
 
@@ -335,214 +259,201 @@ export const createPaymentMethod = async (req: Request, res: Response) => {
     const paymentMethod = await stripe.paymentMethods.create({
       type: 'card',
       card: {
-        token: paymentToken,
+        token: paymentToken, // Use the token from Stripe (e.g., tok_visa)
       },
     });
 
-    res.json({ paymentMethodId: paymentMethod.id });
-  } catch (error) {
-    console.error('Error creating payment method:', error);
-    res.status(500).json({ error: 'Error creating payment method' });
+    res.status(200).json({ paymentMethodId: paymentMethod.id });
+  } catch (error: any) {
+    console.error('Error creating payment method:', error.message);
+    res.status(500).json({ error: 'Error creating payment method', message: error.message });
   }
 };
 
 // Create a Subscription
+// export const createStripeSubscription = async (req: Request, res: Response) => {
+//   const { email, paymentMethodId, priceId, name } = req.body;
+
+//   try {
+//     // Create a customer in Stripe
+//     const customer = await stripe.customers.create({
+//       email,
+//       name,
+//       payment_method: paymentMethodId,
+//       invoice_settings: {
+//         default_payment_method: paymentMethodId,
+//       },
+//     });
+
+//     // Create a subscription for the customer
+//     const subscription = await stripe.subscriptions.create({
+//       customer: customer.id,
+//       items: [{ price: priceId }],
+//       expand: ['latest_invoice.payment_intent'],
+//     });
+
+//     // Check the payment intent, but we're assuming non-3DS cards, so we skip further action checks
+//     const latestInvoice = subscription.latest_invoice as Stripe.Invoice;
+//     const paymentIntent = latestInvoice.payment_intent as Stripe.PaymentIntent;
+
+//     // If no authentication is required, it will succeed here
+//     if (paymentIntent && paymentIntent.status === 'succeeded') {
+//       res.status(200).json({
+//         message: 'Subscription created successfully',
+//         subscription,
+//       });
+//     } else {
+//       res.status(200).json({
+//         message: 'Subscription created, but no immediate charge',
+//         subscription,
+//       });
+//     }
+//   } catch (error: any) {
+//     console.error('Error creating subscription:', error.message);
+//     res.status(500).json({ error: 'Error creating subscription', message: error.message });
+//   }
+// };
+
+// Create a Subscription
 export const createStripeSubscription = async (req: Request, res: Response) => {
-  const { email, paymentMethodId, priceId, name, line1, city, state, country, postal_code } = req.body;
+  const { email, paymentMethodId, priceId, name,phone } = req.body;
 
   try {
     // Create a customer in Stripe
     const customer = await stripe.customers.create({
       email,
+      name,
+      phone,
       payment_method: paymentMethodId,
       invoice_settings: {
         default_payment_method: paymentMethodId,
       },
-      name, // Use dynamic name and address
-      address: {
-        line1,
-        city,
-        state,
-        country,
-        postal_code,
-      },
     });
 
-    // Attach the payment method to the customer
-    await stripe.paymentMethods.attach(paymentMethodId, {
-      customer: customer.id,
-    });
-
-    // Create a subscription
+    // Create a subscription for the customer
     const subscription = await stripe.subscriptions.create({
       customer: customer.id,
       items: [{ price: priceId }],
       expand: ['latest_invoice.payment_intent'],
+      payment_behavior:'default_incomplete', // Ensure subscription remains incomplete until payment is confirmed
+      payment_settings: {
+        payment_method_options: {
+          card: {
+            request_three_d_secure: 'automatic', // Set to automatic to minimize unnecessary 3DS
+          },
+        },
+      },
     });
 
-    // Check if latest_invoice exists and get payment intent
+    // Check the payment intent
     const latestInvoice = subscription.latest_invoice as Stripe.Invoice;
+    const paymentIntent = latestInvoice.payment_intent as Stripe.PaymentIntent;
 
-    if (latestInvoice && latestInvoice.payment_intent) {
-      const paymentIntent = latestInvoice.payment_intent as Stripe.PaymentIntent;
-
-      if (paymentIntent.status === 'requires_payment_method') {
-        return res.status(400).json({
-          error: 'Payment was declined. Please use a different payment method or try again.',
-          paymentIntentStatus: paymentIntent.status,
-          reason: paymentIntent.last_payment_error?.message || 'Card was declined',
-        });
-      }
+    // Handle if payment requires additional action like 3DS
+    if (paymentIntent && paymentIntent.status === 'requires_action') {
+      return res.status(400).json({
+        error: 'Payment requires further authentication.',
+        paymentIntentClientSecret: paymentIntent.client_secret,
+        nextAction: paymentIntent.next_action,
+      });
     }
 
-    res.json({ subscription });
+    // Subscription creation successful without further actions
+    res.status(200).json({
+      message: 'Subscription created successfully',
+      subscription,
+    });
   } catch (error: any) {
-    console.error('Error creating subscription:', error);
+    console.error('Error creating subscription:', error.message);
     res.status(500).json({ error: 'Error creating subscription', message: error.message });
   }
 };
+
 
 // Cancel a Subscription
 export const cancelStripeSubscription = async (req: Request, res: Response) => {
   const { subscriptionId } = req.body;
 
   try {
-    const canceledSubscription = await stripe.subscriptions.cancel(subscriptionId);
+    // Cancel the subscription
+    const canceledStripeSubscription = await stripe.subscriptions.cancel(subscriptionId);
 
     // Optionally, update the subscription status in your database
     await Subscription.findOneAndUpdate(
-      { subscriptionId },
+      { stripeSubscriptionId: subscriptionId },
       { status: 'canceled' }
     );
 
-    res.json({ message: 'Subscription has been canceled', canceledSubscription });
-  } catch (error) {
-    console.error('Error canceling subscription:', error);
-    res.status(500).json({ error: 'Error canceling subscription' });
+    res.status(200).json({ message: 'Subscription has been canceled', canceledStripeSubscription });
+  } catch (error: any) {
+    console.error('Error canceling subscription:', error.message);
+    res.status(500).json({ error: 'Error canceling subscription', message: error.message });
   }
 };
 
-// Handle Stripe Webhook
-// export const handleStripeWebhook = async (req: Request, res: Response) => {
-//   const sig = req.headers['stripe-signature'] as string;
-//   let event: Stripe.Event;
+// Get Subscription Details
+export const getSubscriptionDetails = async (req: IAuthRequest, res: Response) => {
+  try {
+    const { subscriptionId } = req.params;
 
-//   try {
-//     // Pass the raw body to Stripe's constructEvent function
-//     event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET!);
-//   } catch (err) {
-//     if (err instanceof Error) {
-//       console.error(`⚠️  Webhook signature verification failed: ${err.message}`);
-//     }
-//     return res.sendStatus(400); // Bad Request
-//   }
+    // Check if the user is authenticated
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
 
-//   // Handle specific event types
-//   if (event.type === 'invoice.payment_failed') {
-//     const invoice = event.data.object as Stripe.Invoice;
-//     const paymentIntentId = typeof invoice.payment_intent === 'string' ? invoice.payment_intent : invoice.payment_intent?.id;
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
 
-//     // Log payment failure event
-//     if (paymentIntentId) {
-//       await Payment.findOneAndUpdate(
-//         { transactionId: invoice.id },
-//         { status: 'failed' }
-//       );
-//       console.log(`Payment failed for invoice: ${invoice.id}, paymentIntent: ${paymentIntentId}`);
-//     }
-//   }
-
-//   res.json({ received: true });
-// };
-// Handle Stripe Webhook
-// export const handleStripeWebhook = async (req: Request, res: Response) => {
-//   const sig = req.headers['stripe-signature'] as string;
-//   let event: Stripe.Event;
-
-//   try {
-//     // Pass the raw body to Stripe's constructEvent function
-//     event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET!);
-//   } catch (err) {
-//     if (err instanceof Error) {
-//       console.error(`⚠️  Webhook signature verification failed: ${err.message}`);
-//     }
-//     return res.sendStatus(400); // Bad Request
-//   }
-
-//   // Handle specific event types
-//   if (event.type === 'invoice.payment_failed') {
-//     const invoice = event.data.object as Stripe.Invoice;
-//     const paymentIntentId = typeof invoice.payment_intent === 'string' ? invoice.payment_intent : invoice.payment_intent?.id;
-
-//     // Log payment failure event
-//     if (paymentIntentId) {
-//       await Payment.findOneAndUpdate(
-//         { transactionId: invoice.id },
-//         { status: 'failed' }
-//       );
-//       console.log(`Payment failed for invoice: ${invoice.id}, paymentIntent: ${paymentIntentId}`);
-//     }
-//   }
-
-//   res.json({ received: true });
-// };
-// export const handleStripeWebhook = async (req: Request, res: Response) => {
-//   const sig = req.headers['stripe-signature'] as string;
-//   let event: Stripe.Event;
-
-//   try {
-//     // Pass the raw body to Stripe's constructEvent function
-//     event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET!);
-//   } catch (err) {
-//     if (err instanceof Error) {
-//       console.error(`⚠️  Webhook signature verification failed: ${err.message}`);
-//     }
-//     return res.sendStatus(400); // Bad Request
-//   }
-
-//   // Handle specific event types
-//   if (event.type === 'invoice.payment_failed') {
-//     const invoice = event.data.object as Stripe.Invoice;
-
-//     // Check if payment_intent is available and its type
-//     const paymentIntentId = typeof invoice.payment_intent === 'string' ? invoice.payment_intent : invoice.payment_intent?.id;
-
-//     // Log payment failure event
-//     if (paymentIntentId) {
-//       // Update payment status in your database
-//       await Payment.findOneAndUpdate(
-//         { transactionId: invoice.id },
-//         { status: 'failed' }
-//       );
-//       console.log(`Payment failed for invoice: ${invoice.id}, paymentIntent: ${paymentIntentId}`);
-//     }
-//   }
-
-//   res.json({ received: true });
-// };
-
-// Handle Stripe Webhook
-export const handleStripeWebhook = async (req: Request, res: Response) => {
-  // Temporarily bypassing signature check for Postman testing
-  let event;
-  if (process.env.NODE_ENV === 'development' && !req.headers['stripe-signature']) {
-      console.log('Bypassing signature check in development mode');
-      event = req.body; // Directly using the parsed body for testing
-  } else {
-      const sig = req.headers['stripe-signature'] as string;
-      try {
-        console.log("Stripe Webhook Secret:", process.env.STRIPE_WEBHOOK_SECRET);
-
-          event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET!);
-      } catch (err) {
-          if (err instanceof Error) {
-              console.error(`⚠️  Webhook signature verification failed: ${err.message}`);
-          }
-          return res.sendStatus(400); // Bad Request
-      }
+    res.status(200).json(subscription);
+  } catch (error) {
+    console.error('Error retrieving subscription:', error);
+    res.status(500).json({ error: 'Error retrieving subscription' });
   }
+};
 
-  // Proceed with your event handling logic
-  console.log(`Received event type: ${event.type}`);
-  res.json({ received: true });
+// Handle Payment Intent Statuses (insufficient balance, card declined, etc.)
+export const handlePaymentIntent = async (req: IAuthRequest, res: Response) => {
+  const { paymentIntentId } = req.body;
+
+  try {
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+    switch (paymentIntent.status) {
+      case 'succeeded':
+        return res.status(200).json({ message: 'Payment successful', paymentIntent });
+
+      case 'requires_payment_method':
+        return res.status(400).json({ error: 'Payment failed, card declined' });
+
+      case 'requires_action':
+        return res.status(400).json({ error: 'Payment requires additional action' });
+
+      case 'canceled':
+        return res.status(400).json({ error: 'Payment canceled, insufficient balance' });
+
+      default:
+        return res.status(500).json({ error: 'Payment failed, unknown error' });
+    }
+  } catch (error) {
+    console.error('Error handling payment intent:', error);
+    res.status(500).json({ error: 'Error handling payment intent' });
+  }
+};
+
+// Get Payment Details
+export const getPaymentDetails = async (req: IAuthRequest, res: Response) => {
+  try {
+    const { paymentId } = req.params;
+
+    // Check if the user is authenticated
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const payment = await stripe.paymentIntents.retrieve(paymentId);
+
+    res.status(200).json(payment);
+  } catch (error) {
+    console.error('Error retrieving payment details:', error);
+    res.status(500).json({ error: 'Error retrieving payment details' });
+  }
 };
