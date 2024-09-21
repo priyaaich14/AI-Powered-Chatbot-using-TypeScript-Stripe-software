@@ -131,7 +131,7 @@
 
 
 
-//////// USING STRIPE KEYS ///////////////////////////////
+//////////////////// USING STRIPE KEYS TEST ////////////////////////////////////////
 
 // import { Request, Response } from 'express';
 // import Stripe from 'stripe';
@@ -239,7 +239,7 @@
 // };
 
 
-///////////////////////////////////////////
+/////////////////////////////// USING STRIPE KEYS ////////////////////////////////////////////
 
 import { Request, Response } from 'express';
 import Stripe from 'stripe';
@@ -392,6 +392,34 @@ export const cancelStripeSubscription = async (req: Request, res: Response) => {
 };
 
 // Get Subscription Details
+// export const getSubscriptionDetails = async (req: IAuthRequest, res: Response) => {
+//   try {
+//     const { subscriptionId } = req.params;
+
+//     // Check if the user is authenticated
+//     if (!req.user) {
+//       return res.status(401).json({ error: 'Unauthorized' });
+//     }
+
+//     // Fetch subscription details from Stripe
+//     const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+
+//     // Extract the customer ID from the subscription
+//     const customerId = subscription.customer as string;
+
+//     // Fetch customer details from Stripe using the customer ID
+//     const customer = await stripe.customers.retrieve(customerId);
+
+//     // Combine subscription and customer details
+//     res.status(200).json({
+//       subscription,
+//       customer, // This will include details like email, phone, etc.
+//     });
+//   } catch (error) {
+//     console.error('Error retrieving subscription:', error);
+//     res.status(500).json({ error: 'Error retrieving subscription' });
+//   }
+// };
 export const getSubscriptionDetails = async (req: IAuthRequest, res: Response) => {
   try {
     const { subscriptionId } = req.params;
@@ -401,9 +429,27 @@ export const getSubscriptionDetails = async (req: IAuthRequest, res: Response) =
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
+    // Fetch subscription details from Stripe
     const subscription = await stripe.subscriptions.retrieve(subscriptionId);
 
-    res.status(200).json(subscription);
+    // Extract the customer ID from the subscription
+    const customerId = subscription.customer as string;
+
+    // Fetch customer details from Stripe using the customer ID
+    const customer = await stripe.customers.retrieve(customerId);
+
+    // Check if the subscription is expired based on current_period_end
+    const isExpired = new Date(subscription.current_period_end * 1000) < new Date();
+
+    // Combine subscription, customer, and status details
+    res.status(200).json({
+      subscription: {
+        ...subscription,
+        isExpired, // Custom flag to indicate if the subscription is expired
+      },
+      customer, // This will include details like email, phone, etc.
+      status: subscription.status, // Include Stripe status (e.g., "active", "canceled", etc.)
+    });
   } catch (error) {
     console.error('Error retrieving subscription:', error);
     res.status(500).json({ error: 'Error retrieving subscription' });
@@ -440,6 +486,7 @@ export const handlePaymentIntent = async (req: IAuthRequest, res: Response) => {
 };
 
 // Get Payment Details
+
 export const getPaymentDetails = async (req: IAuthRequest, res: Response) => {
   try {
     const { paymentId } = req.params;
@@ -449,9 +496,23 @@ export const getPaymentDetails = async (req: IAuthRequest, res: Response) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const payment = await stripe.paymentIntents.retrieve(paymentId);
+    // Retrieve the payment intent
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentId);
 
-    res.status(200).json(payment);
+    // Check if there's a customer associated with the payment intent
+    const customerId = paymentIntent.customer as string;
+
+    // If there's a customer ID, retrieve customer details
+    let customerDetails = null;
+    if (customerId) {
+      customerDetails = await stripe.customers.retrieve(customerId);
+    }
+
+    // Return payment details along with customer details (if available)
+    res.status(200).json({
+      paymentIntent,
+      customer: customerDetails, // Include customer details in the response
+    });
   } catch (error) {
     console.error('Error retrieving payment details:', error);
     res.status(500).json({ error: 'Error retrieving payment details' });
