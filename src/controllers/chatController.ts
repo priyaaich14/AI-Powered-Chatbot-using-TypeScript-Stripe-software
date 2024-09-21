@@ -1,229 +1,8 @@
-// import { Request, Response } from 'express';
-// import OpenAI from 'openai';
-// import dialogflow from '@google-cloud/dialogflow';
-// import dotenv from 'dotenv';
-// import { Types } from 'mongoose';  // Import mongoose and Types for ObjectId
-// import ChatSession, { IChatSession } from '../models/ChatSession';  // Import the ChatSession model
-// import Technician, { ITechnician } from '../models/Technician';    // Import the Technician model
 
-// dotenv.config();  // Load environment variables
-
-// // Initialize the OpenAI client with the API key
-// const openai = new OpenAI({
-//   apiKey: process.env.OPENAI_API_KEY,  // Use the OpenAI API key from the environment
-// });
-
-// // Initialize Dialogflow client
-// const sessionClient = new dialogflow.SessionsClient();
-
-// // Function to handle chat with the bot (OpenAI + Dialogflow)
-// // This version can handle both HTTP (with req, res) and WebSocket (with message and sessionId directly)
-// export const chatWithBot = async (message: string, sessionId: string, req?: Request, res?: Response) => {
-//   try {
-//     // OpenAI GPT-3.5 response
-//     const aiResponse = await openai.chat.completions.create({
-//       model: 'gpt-3.5-turbo',
-//       messages: [{ role: 'user', content: message }],
-//     });
-
-//     const botReply = aiResponse.choices[0]?.message?.content?.trim();
-
-//     // Dialogflow for simple intents
-//     const sessionPath = sessionClient.projectAgentSessionPath(process.env.DIALOGFLOW_PROJECT_ID!, sessionId);
-//     const dialogflowResponse = await sessionClient.detectIntent({
-//       session: sessionPath,
-//       queryInput: { text: { text: message, languageCode: 'en' } },
-//     });
-//     const dialogflowReply = dialogflowResponse[0]?.queryResult?.fulfillmentText;
-
-//     const reply = botReply || dialogflowReply || 'I could not understand that.';
-
-//     // If HTTP request, send response
-//     if (req && res) {
-//       res.json({ reply });
-//     }
-
-//     // For WebSocket, return the response
-//     return reply;
-//   } catch (error) {
-//     if (res) {
-//       res.status(500).json({ error: 'Error processing chat' });
-//     } else {
-//       console.error('Error processing chat:', error);
-//     }
-//     return 'Error processing chat';
-//   }
-// };
-
-// // Function to escalate a chat to an available technician
-// export const escalateToTechnician = async (req: Request, res: Response) => {
-//   const { chatId } = req.body;
-
-//   try {
-//     // Find the chat session by ID
-//     const chatSession: IChatSession | null = await ChatSession.findById(chatId);
-//     if (!chatSession) return res.status(404).json({ message: 'Chat session not found' });
-
-//     // Find an available technician
-//     const availableTechnician: ITechnician | null = await Technician.findOne({ available: true });
-//     if (!availableTechnician) return res.status(404).json({ message: 'No available technicians' });
-
-//     // Escalate the chat to the technician
-//     chatSession.status = 'escalated';
-//     chatSession.escalatedTo = availableTechnician._id as Types.ObjectId;  // Cast `_id` to ObjectId
-//     await chatSession.save();
-
-//     // Set the technician as unavailable and add the chat session to their handled chats
-//     availableTechnician.available = false;
-//     availableTechnician.handledChats.push(chatSession._id as Types.ObjectId);  // Cast `_id` to ObjectId
-//     await availableTechnician.save();
-
-//     res.json({ message: 'Chat escalated to technician' });
-//   } catch (error) {
-//     res.status(500).json({ error: 'Error escalating chat' });
-//   }
-// };
-
-// // Function to get the chat session and populate the escalated technician info
-// export const getChatSession = async (req: Request, res: Response) => {
-//   const { chatId } = req.params;
-
-//   try {
-//     // Find the chat session and populate the `escalatedTo` field with the technician info
-//     const chatSession: IChatSession | null = await ChatSession.findById(chatId).populate<{
-//       escalatedTo: ITechnician;
-//     }>('escalatedTo');
-
-//     if (!chatSession) {
-//       return res.status(404).json({ message: 'Chat session not found' });
-//     }
-
-//     res.json(chatSession);
-//   } catch (error) {
-//     res.status(500).json({ error: 'Error fetching chat session' });
-//   }
-// };
-
+// //////////////////// TEST ///////////////////////////////////////////////////////////
 
 // import { Request, Response } from 'express';
-// import { v4 as uuidv4 } from 'uuid';
-// import OpenAI from 'openai';
-// import dialogflow from '@google-cloud/dialogflow';
-// import dotenv from 'dotenv';
-// import { Types } from 'mongoose';  // Import mongoose and Types for ObjectId
-// import ChatSession, { IChatSession } from '../models/ChatSession';  // Import the ChatSession model
-// import Technician from '../models/Technician';    // Import the Technician model
-
-// dotenv.config();
-
-// // Initialize the OpenAI client with the API key
-// const openai = new OpenAI({
-//   apiKey: process.env.OPENAI_API_KEY,
-// });
-
-// // Initialize Dialogflow client
-// const sessionClient = new dialogflow.SessionsClient();
-
-// // Function to handle chat with the bot (OpenAI + Dialogflow)
-// export const chatWithBot = async (req: Request, res: Response) => {
-//   const { message, sessionId } = req.body;
-
-//   try {
-//     let chatSession;
-
-//     // If no sessionId is provided, generate a new one
-//     if (!sessionId) {
-//       const newSessionId = uuidv4();  // Generate a new session ID
-//       chatSession = new ChatSession({
-//         sessionId: newSessionId,
-//         userId: req.user._id,  // Assuming the user is authenticated, and req.user exists
-//         messages: [{ sender: 'user', message, timestamp: new Date() }],
-//       });
-//     } else {
-//       // Check if the session exists
-//       chatSession = await ChatSession.findOne({ sessionId });
-//       if (!chatSession) {
-//         chatSession = new ChatSession({
-//           sessionId,
-//           userId: req.user._id,
-//           messages: [{ sender: 'user', message, timestamp: new Date() }],
-//         });
-//       } else {
-//         // Append the new message to the existing session
-//         chatSession.messages.push({ sender: 'user', message, timestamp: new Date() });
-//       }
-//     }
-
-//     await chatSession.save();
-
-//     // Process bot response using OpenAI or Dialogflow
-//     const aiResponse = await openai.chat.completions.create({
-//       model: 'gpt-3.5-turbo',
-//       messages: [{ role: 'user', content: message }],
-//     });
-
-//     const botReply = aiResponse.choices[0]?.message?.content?.trim();
-
-//     // Dialogflow for simple intents
-//     const sessionPath = sessionClient.projectAgentSessionPath(process.env.DIALOGFLOW_PROJECT_ID!, sessionId || chatSession.sessionId);
-//     const dialogflowResponse = await sessionClient.detectIntent({
-//       session: sessionPath,
-//       queryInput: { text: { text: message, languageCode: 'en' } },
-//     });
-//     const dialogflowReply = dialogflowResponse[0]?.queryResult?.fulfillmentText;
-
-//     const reply = botReply || dialogflowReply || 'I could not understand that.';
-
-//     res.json({ reply, sessionId: chatSession.sessionId });
-//   } catch (error) {
-//     res.status(500).json({ error: 'Error processing chat' });
-//   }
-// };
-
-// // Function to escalate a chat to an available technician
-// export const escalateToTechnician = async (req: Request, res: Response) => {
-//   const { chatId } = req.body;
-
-//   try {
-//     const chatSession = await ChatSession.findById(chatId);
-//     if (!chatSession) return res.status(404).json({ message: 'Chat session not found' });
-
-//     const availableTechnician = await Technician.findOne({ available: true });
-//     if (!availableTechnician) return res.status(404).json({ message: 'No available technicians' });
-
-//     chatSession.status = 'escalated';
-//     chatSession.escalatedTo = availableTechnician._id as Types.ObjectId;
-//     await chatSession.save();
-
-//     availableTechnician.available = false;
-//     availableTechnician.handledChats.push(chatSession._id);
-//     await availableTechnician.save();
-
-//     res.json({ message: 'Chat escalated to technician' });
-//   } catch (error) {
-//     res.status(500).json({ error: 'Error escalating chat' });
-//   }
-// };
-
-// // Function to get the chat session and populate the escalated technician info
-// export const getChatSession = async (req: Request, res: Response) => {
-//   const { chatId } = req.params;
-
-//   try {
-//     const chatSession = await ChatSession.findById(chatId).populate('escalatedTo');
-
-//     if (!chatSession) {
-//       return res.status(404).json({ message: 'Chat session not found' });
-//     }
-
-//     res.json(chatSession);
-//   } catch (error) {
-//     res.status(500).json({ error: 'Error fetching chat session' });
-//   }
-// };
-
-
-// import { Request, Response } from 'express';
+// import { IAuthRequest } from '../middlewares/auth';
 // import { v4 as uuidv4 } from 'uuid';
 // import OpenAI from 'openai';
 // import dialogflow from '@google-cloud/dialogflow';
@@ -231,6 +10,7 @@
 // import mongoose from 'mongoose';
 // import ChatSession, { IChatSession } from '../models/ChatSession';
 // import Technician from '../models/Technician';
+// import User, { IUser } from '../models/User';
 
 // dotenv.config();
 
@@ -240,28 +20,28 @@
 
 // const sessionClient = new dialogflow.SessionsClient();
 
-// // Function to handle chat via HTTP (Express middleware)
-// // export const chatWithBotHttp = async (req: Request, res: Response) => {
-// //   try {
-// //     const { message, sessionId } = req.body;
-// //     const chatSession = await getOrCreateChatSession(sessionId, req.user?._id as mongoose.Types.ObjectId, message);
-    
-// //     const botReply = await processBotResponse(message, chatSession.sessionId);
-// //     res.json({ reply: botReply, sessionId: chatSession.sessionId });
-// //   } catch (error) {
-// //     console.error('Error processing chat:', error);
-// //     res.status(500).json({ error: 'Error processing chat' });
-// //   }
-// // };
-// export const chatWithBotHttp = async (req: Request, res: Response) => {
+
+// export const chatWithBotHttp = async (req: IAuthRequest, res: Response) => {
+//   console.log('Authenticated User:', req.user);
 //   try {
 //     const { message, sessionId } = req.body;
-//     const userId = req.user?._id;  // Get user ID from req.user
+//     const userId = req.user?._id; // Make sure userId is extracted properly from the authenticated request
 
-//     // Pass the userId to the getOrCreateChatSession function
-//     const chatSession = await getOrCreateChatSession(sessionId, userId as mongoose.Types.ObjectId, message);
-    
+//     if (!userId) {
+//       return res.status(400).json({ error: 'UserId is required for chat' });
+//     }
+
+//     // Fetch user details to reflect user name in the chat
+//     const user = await User.findById(userId);
+
+//     const chatSession = await getOrCreateChatSession(
+//       sessionId,
+//       userId,
+//       message,
+//       user?.name || 'Anonymous User' // Use user's name or anonymous if not found
+//     );
 //     const botReply = await processBotResponse(message, chatSession.sessionId);
+
 //     res.json({ reply: botReply, sessionId: chatSession.sessionId });
 //   } catch (error) {
 //     console.error('Error processing chat:', error);
@@ -269,7 +49,8 @@
 //   }
 // };
 
-// // Function to handle chat via WebSocket
+
+// // Function to handle chat via WebSocket (no user required)
 // export const chatWithBotWebSocket = async (message: string, sessionId: string) => {
 //   try {
 //     const chatSession = await getOrCreateChatSession(sessionId, undefined, message);
@@ -281,60 +62,39 @@
 // };
 
 // // Helper function to create or retrieve a chat session
-// // const getOrCreateChatSession = async (sessionId?: string, userId?: mongoose.Types.ObjectId, message?: string) => {
-// //   let chatSession: IChatSession | null;
+// const getOrCreateChatSession = async (
+//   sessionId?: string,
+//   userId?: mongoose.Types.ObjectId,
+//   message?: string,
+//   userName?: string
+// ): Promise<IChatSession> => {
+//   if (!message) {
+//     throw new Error('Message is required');
+//   }
 
-// //   const userSessionId = sessionId || uuidv4();  // Ensure sessionId is always a string
-
-// //   if (!sessionId) {
-// //     chatSession = new ChatSession({
-// //       sessionId: userSessionId,
-// //       userId: userId || null,
-// //       messages: [{ sender: 'user', message: message || '', timestamp: new Date() }],  // Ensure message is a string
-// //     });
-// //   } else {
-// //     chatSession = await ChatSession.findOne({ sessionId: userSessionId });
-// //     if (!chatSession) {
-// //       chatSession = new ChatSession({
-// //         sessionId: userSessionId,
-// //         userId: userId || null,
-// //         messages: [{ sender: 'user', message: message || '', timestamp: new Date() }],  // Ensure message is a string
-// //       });
-// //     } else {
-// //       chatSession.messages.push({ sender: 'user', message: message || '', timestamp: new Date() });  // Ensure message is a string
-// //     }
-// //   }
-// //   await chatSession.save();
-// //   return chatSession;
-// // };
-// const getOrCreateChatSession = async (sessionId?: string, userId?: mongoose.Types.ObjectId, message?: string) => {
+//   // Ensure userId is passed and valid
+//   if (!userId) {
+//     throw new Error('UserId is required');
+//   }
 //   let chatSession;
-
-//   // If no sessionId is provided, generate a new one
 //   if (!sessionId) {
 //     const newSessionId = uuidv4();
 //     chatSession = new ChatSession({
 //       sessionId: newSessionId,
-//       userId: userId || null,  // Ensure that userId is provided
-//       messages: [{ sender: 'user', message: message || '', timestamp: new Date() }],
+//       userId: userId,  // Ensure userId is set
+//       messages: [{ sender: userName || 'user', message, timestamp: new Date() }],
 //     });
 //   } else {
 //     chatSession = await ChatSession.findOne({ sessionId });
 //     if (!chatSession) {
 //       chatSession = new ChatSession({
 //         sessionId,
-//         userId: userId || null,
-//         messages: [{ sender: 'user', message: message || '', timestamp: new Date() }],
+//         userId: userId,  // Ensure userId is set
+//         messages: [{ sender: userName || 'user', message, timestamp: new Date() }],
 //       });
 //     } else {
-//       // Append the new message to the existing session
-//       chatSession.messages.push({ sender: 'user', message: message || '', timestamp: new Date() });
+//       chatSession.messages.push({ sender: userName || 'user', message, timestamp: new Date() });
 //     }
-//   }
-
-//   // Validate that userId is present before saving
-//   if (!chatSession.userId) {
-//     throw new Error('User ID is required');
 //   }
 
 //   await chatSession.save();
@@ -343,54 +103,166 @@
 
 // // Helper function to process the bot's response
 // const processBotResponse = async (message: string, sessionId: string) => {
-//   // OpenAI GPT-3.5 response
-//   const aiResponse = await openai.chat.completions.create({
-//     model: 'gpt-3.5-turbo',
-//     messages: [{ role: 'user', content: message }],
-//   });
+//   try {
+//     // Making the OpenAI API request
+//     const aiResponse = await openai.chat.completions.create({
+//       model: 'gpt-3.5-turbo',
+//       messages: [{ role: 'user', content: message }],
+//     });
 
-//   const botReply = aiResponse.choices[0]?.message?.content?.trim();
+//     // Extracting the bot's reply
+//     const botReply = aiResponse.choices[0]?.message?.content?.trim();
 
-//   // Dialogflow for simple intents
-//   const sessionPath = sessionClient.projectAgentSessionPath(process.env.DIALOGFLOW_PROJECT_ID!, sessionId);
-//   const dialogflowResponse = await sessionClient.detectIntent({
-//     session: sessionPath,
-//     queryInput: { text: { text: message, languageCode: 'en' } },
-//   });
+//     const sessionPath = sessionClient.projectAgentSessionPath(process.env.DIALOGFLOW_PROJECT_ID!, sessionId);
+//     const dialogflowResponse = await sessionClient.detectIntent({
+//       session: sessionPath,
+//       queryInput: { text: { text: message, languageCode: 'en' } },
+//     });
 
-//   const dialogflowReply = dialogflowResponse[0]?.queryResult?.fulfillmentText;
-//   return botReply || dialogflowReply || 'I could not understand that.';
+//     const dialogflowReply = dialogflowResponse[0]?.queryResult?.fulfillmentText;
+//     return botReply || dialogflowReply || 'I could not understand that.';
+    
+//   } catch (error: any) {
+//     // Check if the error is related to quota exceeded
+//     if (error.code === 'insufficient_quota') {
+//       console.error('Insufficient quota for OpenAI API:', error.message);
+//       throw new Error('You have exceeded your OpenAI API quota. Please try again later or check your subscription.');
+//     } else {
+//       console.error('Error processing OpenAI request:', error);
+//       throw new Error('Error processing chat with OpenAI');
+//     }
+//   }
+// };
+// // Escalate chat to technician
+// export const escalateToTechnician = async (req: Request, res: Response) => {
+//   const { chatId } = req.body;
+
+//   try {
+//     const chatSession = await ChatSession.findById(chatId);
+//     if (!chatSession) return res.status(404).json({ message: 'Chat session not found' });
+
+//     // Populate the userId field with the full user document
+//     const availableTechnician = await Technician.findOne({ available: true }).populate('userId');
+//     if (!availableTechnician) return res.status(404).json({ message: 'No available technicians' });
+
+//     const technicianName = (availableTechnician.userId as IUser).name; // Explicitly cast userId as IUser
+
+//     chatSession.status = 'escalated';
+//     chatSession.escalatedTo = availableTechnician._id as mongoose.Types.ObjectId;  // Cast _id to ObjectId
+//     chatSession.messages.push({
+//       sender: technicianName,
+//       message: `Your chat has been escalated to technician: ${technicianName}`,
+//       timestamp: new Date(),
+//     });
+
+//     await chatSession.save();
+
+//     // Update the technician's handled chats
+//     (availableTechnician.handledChats as mongoose.Types.ObjectId[]).push(chatSession._id as mongoose.Types.ObjectId); // Cast _id to ObjectId
+//     availableTechnician.available = false;
+//     await availableTechnician.save();
+
+//     res.json({ message: `Chat escalated to technician ${technicianName}` });
+//   } catch (error) {
+//     res.status(500).json({ error: 'Error escalating chat' });
+//   }
+// };
+
+// // Fetch chat session
+// export const getChatSession = async (req: IAuthRequest, res: Response) => {
+//   const { chatId } = req.params;
+
+//   try {
+//     const chatSession = await ChatSession.findById(chatId)
+//       .populate('escalatedTo', 'name')  // Populate technician's name
+//       .populate('userId', 'name')  // Populate user's name
+//       .exec();
+
+//     if (!chatSession) {
+//       return res.status(404).json({ message: 'Chat session not found' });
+//     }
+
+//     // Check if the user is either the owner of the chat or has the role of admin or technician
+//     const isAdminOrTechnician = req.user.role === 'admin' || req.user.role === 'technician';
+//     const isOwner = chatSession.userId && chatSession.userId.equals(req.user._id);
+
+//     if (!isAdminOrTechnician && !isOwner) {
+//       return res.status(403).json({ message: 'Access denied: You can only view your own chats.' });
+//     }
+
+//     // Include technician and user names in the response
+//     const technician = chatSession.escalatedTo as IUser;
+//     const user = chatSession.userId as IUser;
+
+//     res.json({
+//       chatSession,
+//       userName: user ? user.name : 'Anonymous User',
+//       technicianName: technician ? technician.name : 'Technician',
+//     });
+//   } catch (error) {
+//     res.status(500).json({ error: 'Error fetching chat session' });
+//   }
+// };
+// // Fetch all chat sessions (Admin and Technician only)
+// export const getAllChatSessions = async (req: IAuthRequest, res: Response) => {
+//   try {
+//     // Ensure the user is either an admin or a technician
+//     const isAdminOrTechnician = req.user.role === 'admin' || req.user.role === 'technician';
+
+//     if (!isAdminOrTechnician) {
+//       return res.status(403).json({ message: 'Access denied: Only admins and technicians can view all chats.' });
+//     }
+
+//     // Fetch all chat sessions
+//     const chatSessions = await ChatSession.find()
+//       .populate('escalatedTo', 'name')  // Populate technician names
+//       .populate('userId', 'name')  // Populate user names
+//       .exec();
+
+//     res.json(chatSessions);
+//   } catch (error) {
+//     res.status(500).json({ error: 'Error fetching all chat sessions' });
+//   }
 // };
 
 
+//////////only dialogflow/////////////////
 
 import { Request, Response } from 'express';
-import { IAuthRequest } from '../middlewares/auth';  // Import the custom request type
+import { IAuthRequest } from '../middlewares/auth';
 import { v4 as uuidv4 } from 'uuid';
-import OpenAI from 'openai';
 import dialogflow from '@google-cloud/dialogflow';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import ChatSession, { IChatSession } from '../models/ChatSession';
 import Technician from '../models/Technician';
+import User, { IUser } from '../models/User';
+import { Socket } from 'socket.io';
 
 dotenv.config();
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 const sessionClient = new dialogflow.SessionsClient();
 
-// Function to handle chat via HTTP (Express middleware)
+// Function to handle chat via HTTP (Dialogflow only)
 export const chatWithBotHttp = async (req: IAuthRequest, res: Response) => {
+  console.log('Authenticated User:', req.user);
   try {
     const { message, sessionId } = req.body;
-    const userId = req.user?._id as mongoose.Types.ObjectId;  // Use the custom IAuthRequest with user property
+    const userId = req.user?._id; 
 
-    const chatSession = await getOrCreateChatSession(sessionId, userId, message);
-    const botReply = await processBotResponse(message, chatSession.sessionId);
+    if (!userId) {
+      return res.status(400).json({ error: 'UserId is required for chat' });
+    }
+
+    const user = await User.findById(userId);
+    const chatSession = await getOrCreateChatSession(
+      sessionId,
+      userId,
+      message,
+      user?.name || 'Anonymous User'
+    );
     
+    const botReply = await processBotResponseWithDialogflow(message, chatSession.sessionId);
     res.json({ reply: botReply, sessionId: chatSession.sessionId });
   } catch (error) {
     console.error('Error processing chat:', error);
@@ -398,68 +270,34 @@ export const chatWithBotHttp = async (req: IAuthRequest, res: Response) => {
   }
 };
 
-// Function to handle chat via WebSocket (no user required)
-export const chatWithBotWebSocket = async (message: string, sessionId: string) => {
-  try {
-    const chatSession = await getOrCreateChatSession(sessionId, undefined, message);
-    return await processBotResponse(message, chatSession.sessionId);
-  } catch (error) {
-    console.error('Error processing chat:', error);
-    return 'Error processing chat';
-  }
-};
-
 // Helper function to create or retrieve a chat session
-// const getOrCreateChatSession = async (sessionId?: string, userId?: mongoose.Types.ObjectId, message?: string) => {
-//   let chatSession;
-
-//   if (!sessionId) {
-//     const newSessionId = uuidv4();
-//     chatSession = new ChatSession({
-//       sessionId: newSessionId,
-//       userId: userId || null,
-//       messages: [{ sender: 'user', message, timestamp: new Date() }],
-//     });
-//   } else {
-//     chatSession = await ChatSession.findOne({ sessionId });
-//     if (!chatSession) {
-//       chatSession = new ChatSession({
-//         sessionId,
-//         userId: userId || null,
-//         messages: [{ sender: 'user', message, timestamp: new Date() }],
-//       });
-//     } else {
-//       chatSession.messages.push({ sender: 'user', message, timestamp: new Date() });
-//     }
-//   }
-
-//   await chatSession.save();
-//   return chatSession;
-// };
-const getOrCreateChatSession = async (sessionId?: string, userId?: mongoose.Types.ObjectId, message?: string) => {
-  if (!message) {
-    throw new Error('Message is required');  // Ensure that message is not undefined
-  }
+const getOrCreateChatSession = async (
+  sessionId?: string,
+  userId?: mongoose.Types.ObjectId,
+  message?: string,
+  userName?: string
+): Promise<IChatSession> => {
+  if (!message) throw new Error('Message is required');
+  if (!userId) throw new Error('UserId is required');
 
   let chatSession;
-
   if (!sessionId) {
     const newSessionId = uuidv4();
     chatSession = new ChatSession({
       sessionId: newSessionId,
-      userId: userId || null,
-      messages: [{ sender: 'user', message, timestamp: new Date() }],
+      userId: userId,
+      messages: [{ sender: userName || 'user', message, timestamp: new Date() }],
     });
   } else {
     chatSession = await ChatSession.findOne({ sessionId });
     if (!chatSession) {
       chatSession = new ChatSession({
         sessionId,
-        userId: userId || null,
-        messages: [{ sender: 'user', message, timestamp: new Date() }],
+        userId: userId,
+        messages: [{ sender: userName || 'user', message, timestamp: new Date() }],
       });
     } else {
-      chatSession.messages.push({ sender: 'user', message, timestamp: new Date() });
+      chatSession.messages.push({ sender: userName || 'user', message, timestamp: new Date() });
     }
   }
 
@@ -467,64 +305,129 @@ const getOrCreateChatSession = async (sessionId?: string, userId?: mongoose.Type
   return chatSession;
 };
 
-// Helper function to process the bot's response
-const processBotResponse = async (message: string, sessionId: string) => {
-  const aiResponse = await openai.chat.completions.create({
-    model: 'gpt-3.5-turbo',
-    messages: [{ role: 'user', content: message }],
-  });
+// Helper function to process the bot's response using Dialogflow
+const processBotResponseWithDialogflow = async (message: string, sessionId: string) => {
+  try {
+    const sessionPath = sessionClient.projectAgentSessionPath(process.env.DIALOGFLOW_PROJECT_ID!, sessionId);
+    const dialogflowResponse = await sessionClient.detectIntent({
+      session: sessionPath,
+      queryInput: { text: { text: message, languageCode: 'en' } },
+    });
 
-  const botReply = aiResponse.choices[0]?.message?.content?.trim();
-
-  const sessionPath = sessionClient.projectAgentSessionPath(process.env.DIALOGFLOW_PROJECT_ID!, sessionId);
-  const dialogflowResponse = await sessionClient.detectIntent({
-    session: sessionPath,
-    queryInput: { text: { text: message, languageCode: 'en' } },
-  });
-
-  const dialogflowReply = dialogflowResponse[0]?.queryResult?.fulfillmentText;
-  return botReply || dialogflowReply || 'I could not understand that.';
+    const dialogflowReply = dialogflowResponse[0]?.queryResult?.fulfillmentText;
+    return dialogflowReply || 'I could not understand that.';
+  } catch (error) {
+    console.error('Error processing Dialogflow request:', error);
+    throw new Error('Error processing chat with Dialogflow');
+  }
 };
 
-// Escalate chat to technician
+// Escalate chat to technician (No change here)
+
 export const escalateToTechnician = async (req: Request, res: Response) => {
-  const { chatId } = req.body;
+  const { chatId } = req.body; // This is now sessionId, not _id
 
   try {
-    const chatSession = await ChatSession.findById(chatId);
+    // Find chat session by sessionId instead of _id
+    const chatSession = await ChatSession.findOne({ sessionId: chatId });
     if (!chatSession) return res.status(404).json({ message: 'Chat session not found' });
 
-    const availableTechnician = await Technician.findOne({ available: true });
+    const availableTechnician = await Technician.findOne({ available: true }).populate('userId');
     if (!availableTechnician) return res.status(404).json({ message: 'No available technicians' });
+
+    const technicianName = (availableTechnician.userId as IUser).name;
 
     chatSession.status = 'escalated';
     chatSession.escalatedTo = availableTechnician._id as mongoose.Types.ObjectId;
-    await chatSession.save();
+    chatSession.messages.push({
+      sender: technicianName,
+      message: `Your chat has been escalated to technician: ${technicianName}`,
+      timestamp: new Date(),
+    });
 
-    // Fix the handledChats.push method
-    (availableTechnician.handledChats as mongoose.Types.ObjectId[]).push(chatSession._id as mongoose.Types.ObjectId);
+    await chatSession.save();
+    availableTechnician.handledChats.push(chatSession._id as mongoose.Types.ObjectId);
     availableTechnician.available = false;
     await availableTechnician.save();
 
-    res.json({ message: 'Chat escalated to technician' });
+    res.json({ message: `Chat escalated to technician ${technicianName}` });
   } catch (error) {
     res.status(500).json({ error: 'Error escalating chat' });
   }
 };
 
+
 // Fetch chat session
-export const getChatSession = async (req: Request, res: Response) => {
+export const getChatSession = async (req: IAuthRequest, res: Response) => {
   const { chatId } = req.params;
 
   try {
-    const chatSession = await ChatSession.findById(chatId).populate('escalatedTo');
+    // Use `sessionId` instead of `_id`
+    const chatSession = await ChatSession.findOne({ sessionId: chatId })
+      .populate('escalatedTo', 'name')
+      .populate('userId', 'name')
+      .exec();
 
     if (!chatSession) {
       return res.status(404).json({ message: 'Chat session not found' });
     }
 
-    res.json(chatSession);
+    const isAdminOrTechnician = req.user.role === 'admin' || req.user.role === 'technician';
+    const isOwner = chatSession.userId && chatSession.userId.equals(req.user._id);
+
+    if (!isAdminOrTechnician && !isOwner) {
+      return res.status(403).json({ message: 'Access denied: You can only view your own chats.' });
+    }
+
+    const technician = chatSession.escalatedTo as IUser;
+    const user = chatSession.userId as IUser;
+
+    res.json({
+      chatSession,
+      userName: user ? user.name : 'Anonymous User',
+      technicianName: technician ? technician.name : 'Technician',
+    });
   } catch (error) {
     res.status(500).json({ error: 'Error fetching chat session' });
+  }
+};
+
+
+// Fetch all chat sessions (Admin and Technician only)
+export const getAllChatSessions = async (req: IAuthRequest, res: Response) => {
+  try {
+    const isAdminOrTechnician = req.user.role === 'admin' || req.user.role === 'technician';
+    if (!isAdminOrTechnician) {
+      return res.status(403).json({ message: 'Access denied: Only admins and technicians can view all chats.' });
+    }
+
+    const chatSessions = await ChatSession.find()
+      .populate('escalatedTo', 'name')
+      .populate('userId', 'name')
+      .exec();
+
+    res.json(chatSessions);
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching all chat sessions' });
+  }
+};
+
+// Real-time chat handler with WebSocket (Socket.IO)
+export const chatWithBotWebSocket = async (
+  io: any, 
+  socket: Socket, 
+  message: string, 
+  sessionId: string, 
+  userId: string
+) => {
+  try {
+    const chatSession = await getOrCreateChatSession(sessionId, new mongoose.Types.ObjectId(userId), message, 'Anonymous User');
+    const botReply = await processBotResponseWithDialogflow(message, chatSession.sessionId);
+    
+    // Emit the bot response back to the client
+    socket.emit('botReply', { sessionId: chatSession.sessionId, reply: botReply });
+  } catch (error) {
+    console.error('Error processing chat via WebSocket:', error);
+    socket.emit('botError', 'Error processing chat.');
   }
 };

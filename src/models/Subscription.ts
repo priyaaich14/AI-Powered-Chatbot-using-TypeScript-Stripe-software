@@ -1,4 +1,6 @@
+
 import mongoose, { Document, Schema } from 'mongoose';
+
 export interface ISubscription extends Document {
   userId: mongoose.Types.ObjectId;
   plan: string;
