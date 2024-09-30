@@ -2,8 +2,10 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/User'
+import Technician from '../models/Technician';
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
+import mongoose from 'mongoose';
 
 interface IAuthRequest extends Request {
   user?: any;
@@ -18,20 +20,8 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// export const registerUser = async (req: Request, res: Response) => {
-//   const { email, password, role } = req.body;
-
-//   try {
-//     const hashedPassword = await bcrypt.hash(password, 10);
-//     const newUser = new User({ email, password: hashedPassword, role });
-//     await newUser.save();
-//     res.status(201).json({ message: 'User registered successfully' });
-//   } catch (error) {
-//     res.status(500).json({ error: 'Error registering user' });
-//   }
-// };
 export const registerUser = async (req: Request, res: Response) => {
-  const { name, email, password, role } = req.body; // Add name to the request body
+  const { name, email, password, role } = req.body;
 
   try {
     // Hash the password before saving it
@@ -39,7 +29,7 @@ export const registerUser = async (req: Request, res: Response) => {
 
     // Create a new user with the provided name, email, password, and role
     const newUser = new User({
-      name,           // Save the user's name
+      name,
       email,
       password: hashedPassword,
       role,
@@ -48,6 +38,16 @@ export const registerUser = async (req: Request, res: Response) => {
     // Save the user to the database
     await newUser.save();
 
+    // If the user is a technician, create a technician profile
+    if (role === 'technician') {
+      const newTechnician = new Technician({
+        userId: newUser._id,
+        available: true,  // Mark technician as available
+        handledChats: []
+      });
+      await newTechnician.save();
+    }
+
     res.status(201).json({ message: 'User registered successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Error registering user' });
@@ -55,26 +55,6 @@ export const registerUser = async (req: Request, res: Response) => {
 };
 
 
-
-// export const loginUser = async (req: Request, res: Response) => {
-//   const { email, password } = req.body;
-
-//   try {
-//     const user = await User.findOne({ email });
-//     if (!user) return res.status(404).json({ message: 'User not found' });
-
-//     const isMatch = await bcrypt.compare(password, user.password);
-//     if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
-
-//     // Generate JWT token with user ID and role
-//     const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET!, { expiresIn: '1h' });
-
-//     // Return both the token and userId in the response
-//     res.json({ token, userId: user._id });
-//   } catch (error) {
-//     res.status(500).json({ error: 'Error logging in' });
-//   }
-// };
 export const loginUser = async (req: Request, res: Response) => {
   const { email, password } = req.body;
 
@@ -87,6 +67,17 @@ export const loginUser = async (req: Request, res: Response) => {
 
     // Generate JWT token with user ID and role
     const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET!, { expiresIn: '1h' });
+
+    // If the user is a technician, mark them as available
+    if (user.role === 'technician') {
+      const technician = await Technician.findOne({ userId: user._id });
+      if (!technician) {
+        return res.status(404).json({ message: 'Technician profile not found' });
+      }
+
+      technician.available = true;  // Mark technician as available when they log in
+      await technician.save();
+    }
 
     // Return token, userId, name, and email in the response
     res.json({ token, userId: user._id, name: user.name, email: user.email });
@@ -255,5 +246,47 @@ export const forgotPassword = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error in forgotPassword:', error);
     res.status(500).json({ error: 'Error processing request' });
+  }
+};
+
+// Add technician function (Admin only)
+export const addTechnician = async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.body;  // Pass the technician's user ID
+
+    // Check if user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Check if the user is already a technician
+    if (user.role === 'technician') {
+      return res.status(400).json({ message: 'User is already a technician' });
+    }
+
+    // Check if technician profile already exists
+    const existingTechnician = await Technician.findOne({ userId });
+    if (existingTechnician) {
+      return res.status(400).json({ message: 'Technician profile already exists' });
+    }
+
+    // Create new technician profile
+    const newTechnician = new Technician({
+      userId: new mongoose.Types.ObjectId(userId),
+      available: true,  // Mark technician as available
+      handledChats: []
+    });
+
+    // Save the technician profile
+    await newTechnician.save();
+
+    // Update user's role to 'technician'
+    user.role = 'technician';
+    await user.save();
+
+    res.status(201).json({ message: 'Technician added successfully', technician: newTechnician });
+  } catch (error) {
+    res.status(500).json({ error: 'Error adding technician' });
   }
 };

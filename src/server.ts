@@ -5,17 +5,18 @@ import cors from 'cors';
 import http from 'http';
 import { Server } from 'socket.io';
 import connectDB from './config/db';
-import { registerUser, loginUser,forgotPassword,resetPassword,updatePassword,updateEmail,adminDeleteAccount,deleteOwnAccount,getAllUsers,getAllTechnicians } from './controllers/authController';
+import { registerUser, loginUser,forgotPassword,resetPassword,updatePassword,updateEmail,adminDeleteAccount,deleteOwnAccount,getAllUsers,getAllTechnicians,addTechnician } from './controllers/authController';
 //import { chatWithBotHttp, chatWithBotWebSocket, escalateToTechnician, getChatSession, getAllChatSessions } from './controllers/chatController';
-import { chatWithBotHttp, escalateToTechnician, getChatSession, getAllChatSessions, chatWithBotWebSocket } from './controllers/chatController';
+import { chatWithBotHttp, escalateToTechnician, getChatSession, getAllChatSessions, chatWithBotWebSocket, getUserChatHistory } from './controllers/chatController';
 import { createPaymentMethod,createStripeSubscription, cancelStripeSubscription, getPaymentDetails, getSubscriptionDetails, handlePaymentIntent} from './controllers/paymentController';
 import { authenticateToken, authorizeRoles, authenticateTokenWebSocket } from './middlewares/auth';
 //import bodyParser from 'body-parser';
 //import { handleStripeWebhook } from './controllers/paymentController';
 //import { createPaymentMethod } from './controllers/paymentController';
 
-import mongoose from 'mongoose';  // Import mongoose
-import Technician from './models/Technician';  
+import ChatSession from './models/ChatSession'; // Adjust the import path as necessary
+
+
 
 //import './types/express'
 dotenv.config();
@@ -34,6 +35,26 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: '*' },
 });
+
+const INACTIVITY_TIMEOUT = 60 * 1000; // Set timeout duration (1 minute for testing)
+
+const closeInactiveChats = async () => {
+  const cutoffTime = new Date(Date.now() - INACTIVITY_TIMEOUT);
+
+  const inactiveChats = await ChatSession.find({
+    status: 'open',
+    updatedAt: { $lt: cutoffTime } // Check for inactivity
+  });
+
+  for (const chat of inactiveChats) {
+    chat.status = 'closed'; // Update status to closed
+    await chat.save(); // Save changes
+    console.log(`Chat session ${chat.sessionId} has been closed due to inactivity.`);
+  }
+};
+
+// Call this function periodically (e.g., every minute)
+setInterval(closeInactiveChats, 60 * 1000); // Check every minute
 
 // Use the WebSocket JWT authentication middleware
 io.use(authenticateTokenWebSocket);
@@ -68,6 +89,8 @@ app.delete('/auth/delete-account', authenticateToken, deleteOwnAccount);
 app.delete('/auth/delete-user/:userId', authenticateToken, authorizeRoles(['admin']), adminDeleteAccount);
 app.get('/auth/all-users', authenticateToken, authorizeRoles(['admin']), getAllUsers);
 app.get('/auth/all-technicians', authenticateToken, authorizeRoles(['admin']), getAllTechnicians);
+// Define the route for adding a technician (Admin only)
+app.post('/technician/add', authenticateToken, authorizeRoles(['admin']), addTechnician);
 
 // // Chat routes for HTTP requests
 // app.post('/chat', authenticateToken, chatWithBotHttp);
@@ -85,6 +108,7 @@ app.get('/auth/all-technicians', authenticateToken, authorizeRoles(['admin']), g
 app.post('/chat', authenticateToken, chatWithBotHttp);  // Chat with bot using HTTP
 app.post('/chat/escalate', authenticateToken, escalateToTechnician);  // Escalate chat to technician
 app.get('/chat/:chatId', authenticateToken, getChatSession);  // Fetch specific chat session
+app.get('/my-chats', authenticateToken, getUserChatHistory); // Fetch logged-in user's chat history
 app.get('/chats', authenticateToken, authorizeRoles(['admin', 'technician']), getAllChatSessions);  // Fetch all chat sessions (admin/technician only)
 
 
@@ -118,30 +142,8 @@ app.get('/payment/:paymentId', authenticateToken, getPaymentDetails);
 //   }
 // });
 
-// Route for adding a technician
-app.post('/technician/add', async (req, res) => {
-  try {
-    const { userId } = req.body;  // Pass the technician's user ID
-    
-    // Check if technician already exists
-    const existingTechnician = await Technician.findOne({ userId });
-    if (existingTechnician) {
-      return res.status(400).json({ message: 'Technician already exists' });
-    }
 
-    const newTechnician = new Technician({
-       // Ensure you convert the userId to ObjectId
-      userId: new mongoose.Types.ObjectId(userId),
-      available: true,  // Mark technician as available
-      handledChats: []
-    });
 
-    await newTechnician.save();
-    res.status(201).json({ message: 'Technician added successfully' });
-  } catch (error) {
-    res.status(500).json({ error: 'Error adding technician' });
-  }
-});
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));

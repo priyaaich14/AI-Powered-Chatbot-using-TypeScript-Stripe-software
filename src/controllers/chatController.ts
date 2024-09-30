@@ -243,27 +243,48 @@ dotenv.config();
 
 const sessionClient = new dialogflow.SessionsClient();
 
+
+
 // Function to handle chat via HTTP (Dialogflow only)
 export const chatWithBotHttp = async (req: IAuthRequest, res: Response) => {
   console.log('Authenticated User:', req.user);
+
   try {
     const { message, sessionId } = req.body;
-    const userId = req.user?._id; 
+    const userId = req.user?._id; // Ensure user authentication middleware populates this
 
     if (!userId) {
       return res.status(400).json({ error: 'UserId is required for chat' });
     }
 
+    // Find the user by ID in your DB
     const user = await User.findById(userId);
+
+    // Get existing or create new chat session
     const chatSession = await getOrCreateChatSession(
       sessionId,
       userId,
       message,
       user?.name || 'Anonymous User'
     );
-    
+
+    // Get the bot's response using Dialogflow
     const botReply = await processBotResponseWithDialogflow(message, chatSession.sessionId);
+
+    // Add the bot's reply to the chat session
+    chatSession.messages.push({
+      sender: 'DobbyBot', // Use the bot's name as the sender
+      senderType: 'Bot',  // Add senderType for technician message
+      message: botReply,
+      timestamp: new Date()
+    });
+
+    // Save the updated chat session with both user and bot messages
+    await chatSession.save();
+
+    // Return the bot's reply along with the session ID
     res.json({ reply: botReply, sessionId: chatSession.sessionId });
+
   } catch (error) {
     console.error('Error processing chat:', error);
     res.status(500).json({ error: 'Error processing chat' });
@@ -271,6 +292,7 @@ export const chatWithBotHttp = async (req: IAuthRequest, res: Response) => {
 };
 
 // Helper function to create or retrieve a chat session
+
 const getOrCreateChatSession = async (
   sessionId?: string,
   userId?: mongoose.Types.ObjectId,
@@ -281,30 +303,34 @@ const getOrCreateChatSession = async (
   if (!userId) throw new Error('UserId is required');
 
   let chatSession;
+
   if (!sessionId) {
     const newSessionId = uuidv4();
     chatSession = new ChatSession({
       sessionId: newSessionId,
-      userId: userId,
-      messages: [{ sender: userName || 'user', message, timestamp: new Date() }],
+      userId,
+      messages: [{ sender: userName || 'user', senderType: 'user', message, timestamp: new Date() }],
+      updatedAt: new Date(), // Set updatedAt on creation
     });
   } else {
     chatSession = await ChatSession.findOne({ sessionId });
+
     if (!chatSession) {
       chatSession = new ChatSession({
         sessionId,
-        userId: userId,
-        messages: [{ sender: userName || 'user', message, timestamp: new Date() }],
+        userId,
+        messages: [{ sender: userName || 'user', senderType: 'user', message, timestamp: new Date() }],
+        updatedAt: new Date(), // Set updatedAt on creation
       });
     } else {
-      chatSession.messages.push({ sender: userName || 'user', message, timestamp: new Date() });
+      chatSession.messages.push({ sender: userName || 'user', senderType: 'user', message, timestamp: new Date() });
+      chatSession.updatedAt = new Date(); // Update timestamp on message addition
     }
   }
 
   await chatSession.save();
   return chatSession;
 };
-
 // Helper function to process the bot's response using Dialogflow
 const processBotResponseWithDialogflow = async (message: string, sessionId: string) => {
   try {
@@ -315,7 +341,10 @@ const processBotResponseWithDialogflow = async (message: string, sessionId: stri
     });
 
     const dialogflowReply = dialogflowResponse[0]?.queryResult?.fulfillmentText;
-    return dialogflowReply || 'I could not understand that.';
+    //return dialogflowReply || 'I could not understand that.';
+    const namedReply = `DobbyBot: ${dialogflowReply || 'I could not understand that.'}`;
+
+    return namedReply;
   } catch (error) {
     console.error('Error processing Dialogflow request:', error);
     throw new Error('Error processing chat with Dialogflow');
@@ -341,6 +370,7 @@ export const escalateToTechnician = async (req: Request, res: Response) => {
     chatSession.escalatedTo = availableTechnician._id as mongoose.Types.ObjectId;
     chatSession.messages.push({
       sender: technicianName,
+      senderType: 'technician',  // Add senderType for technician message
       message: `Your chat has been escalated to technician: ${technicianName}`,
       timestamp: new Date(),
     });
@@ -411,6 +441,30 @@ export const getAllChatSessions = async (req: IAuthRequest, res: Response) => {
     res.status(500).json({ error: 'Error fetching all chat sessions' });
   }
 };
+
+
+
+export const getUserChatHistory = async (req: IAuthRequest, res: Response) => {
+  const userId = req.user?._id; // Get the authenticated user's ID
+
+  try {
+    // Fetch all chat sessions where userId matches the authenticated user's ID
+    const userChats = await ChatSession.find({ userId })
+      .populate('escalatedTo', 'name') // Optionally populate technician details
+      .populate('userId', 'name') // Optionally populate user details
+      .exec();
+
+    if (!userChats.length) {
+      return res.status(404).json({ message: 'No chat history found for this user.' });
+    }
+
+    res.json(userChats); // Return the user's chat history
+  } catch (error) {
+    console.error('Error fetching user chat history:', error);
+    res.status(500).json({ error: 'Error fetching chat history' });
+  }
+};
+
 
 // Real-time chat handler with WebSocket (Socket.IO)
 export const chatWithBotWebSocket = async (
