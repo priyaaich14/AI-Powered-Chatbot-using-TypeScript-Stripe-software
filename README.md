@@ -1,6 +1,6 @@
 Using the stripe mock software for the Stripe payment testing
 https://github.com/stripe/stripe-mock.git to run it command: go run main.go
-
+To run the backend : npm run dev
 Stripe Test Cards for Postman:
 You can use the following test card numbers in the paymentToken when creating a payment method to simulate different outcomes.
 
@@ -21,5 +21,9 @@ Endpoint	                                Authorization	Stripe Key Needed?	JWT To
 /payment/stripe/confirm	                      JWT Token	        Yes (Optional)	    Yes
 /payment/subscription/:subscriptionId	      JWT Token	        Yes (Optional)	    Yes
 /payment/:paymentId	                          JWT Token	        Yes (Optional)	    Yes
+
+
+Frontend : .env :-
+REACT_APP_API_BASE_URL= Your_localhost Url
 
 
