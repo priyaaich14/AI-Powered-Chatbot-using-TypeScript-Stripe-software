@@ -20,6 +20,7 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+
 export const registerUser = async (req: Request, res: Response) => {
   const { name, email, password, role } = req.body;
 
@@ -43,16 +44,21 @@ export const registerUser = async (req: Request, res: Response) => {
       const newTechnician = new Technician({
         userId: newUser._id,
         available: true,  // Mark technician as available
-        handledChats: []
+        handledChats: [],
       });
       await newTechnician.save();
     }
 
-    res.status(201).json({ message: 'User registered successfully' });
+    // Generate a JWT token with user ID and role
+    const token = jwt.sign({ id: newUser._id, role: newUser.role }, process.env.JWT_SECRET!, { expiresIn: '1h' });
+
+    // Return the token, userId, name, and email in the response
+    res.status(201).json({ token, user: { id: newUser._id, name: newUser.name, email: newUser.email, role: newUser.role } });
   } catch (error) {
     res.status(500).json({ error: 'Error registering user' });
   }
 };
+
 
 
 export const loginUser = async (req: Request, res: Response) => {
@@ -68,19 +74,16 @@ export const loginUser = async (req: Request, res: Response) => {
     // Generate JWT token with user ID and role
     const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET!, { expiresIn: '1h' });
 
-    // If the user is a technician, mark them as available
-    if (user.role === 'technician') {
-      const technician = await Technician.findOne({ userId: user._id });
-      if (!technician) {
-        return res.status(404).json({ message: 'Technician profile not found' });
-      }
-
-      technician.available = true;  // Mark technician as available when they log in
-      await technician.save();
-    }
-
-    // Return token, userId, name, and email in the response
-    res.json({ token, userId: user._id, name: user.name, email: user.email });
+    // Return token and user object with the same structure as registration
+    res.json({
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    });
   } catch (error) {
     res.status(500).json({ error: 'Error logging in' });
   }
@@ -149,8 +152,10 @@ export const updateEmail = async (req: IAuthRequest, res: Response) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
+    console.log('User ID from token:', req.user.id);  // Debugging log
+
     const { newEmail } = req.body;
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(req.user.id);  // Fetch user by ID
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -164,6 +169,7 @@ export const updateEmail = async (req: IAuthRequest, res: Response) => {
     res.status(500).json({ error: 'Error updating email' });
   }
 };
+
 
 // Update Password
 
@@ -234,8 +240,9 @@ export const forgotPassword = async (req: Request, res: Response) => {
     user.resetPasswordExpires = new Date(Date.now() + 3600000); // 1 hour expiry
     await user.save();
     
-    const resetURL = `${req.protocol}://${req.get('host')}/auth/reset/${token}`;
-    
+    //const resetURL = `${req.protocol}://${req.get('host')}/auth/reset-password/${token}`;
+    const resetURL = `${process.env.FRONTEND_URL}/reset-password/${token}`;
+
     await transporter.sendMail({
       to: user.email,
       subject: 'Password Reset',

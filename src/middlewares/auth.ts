@@ -9,19 +9,17 @@ export interface IAuthRequest extends Request {
 }
 
 export const authenticateToken = (req: IAuthRequest, res: Response, next: NextFunction) => {
-  console.log('Authenticate middleware hit');  // Add this log to ensure middleware is called
   const token = req.header('Authorization')?.split(' ')[1];
-  console.log('No token provided');
+
   if (!token) return res.status(401).json({ message: 'Access denied' });
 
   try {
-    const verified = jwt.verify(token, process.env.JWT_SECRET!) as { id: string; role: string };;
-    //req.user = verified;
-    req.user = { _id: verified.id, role: verified.role }; 
-    // Log to ensure that the token is parsed and user data is set correctly
-    console.log('Verified user in middleware:', req.user);
+    const verified = jwt.verify(token, process.env.JWT_SECRET!) as { id: string; role: string };
+    
+    // Attach the verified user ID and role to req.user
+    req.user = { id: verified.id, role: verified.role };
 
-    next();
+    next();  // Proceed to the next middleware/controller
   } catch (error) {
     res.status(400).json({ message: 'Invalid token' });
   }

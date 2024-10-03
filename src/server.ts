@@ -87,7 +87,7 @@ app.put('/auth/update-password', authenticateToken, updatePassword);
 app.put('/auth/update-email', authenticateToken, updateEmail);
 app.delete('/auth/delete-account', authenticateToken, deleteOwnAccount);
 app.delete('/auth/delete-user/:userId', authenticateToken, authorizeRoles(['admin']), adminDeleteAccount);
-app.get('/auth/all-users', authenticateToken, authorizeRoles(['admin']), getAllUsers);
+app.get('/auth/all-users', authenticateToken, authorizeRoles(['admin','technician']), getAllUsers);
 app.get('/auth/all-technicians', authenticateToken, authorizeRoles(['admin']), getAllTechnicians);
 // Define the route for adding a technician (Admin only)
 app.post('/technician/add', authenticateToken, authorizeRoles(['admin']), addTechnician);
