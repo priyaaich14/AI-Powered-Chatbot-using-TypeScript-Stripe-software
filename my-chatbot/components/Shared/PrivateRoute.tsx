@@ -1,28 +1,3 @@
-// import React from 'react';
-// import { Navigate, Outlet } from 'react-router-dom';
-// import { useSelector } from 'react-redux';
-// import { selectAuth } from '../../redux/slices/authSlice.ts';
-
-// interface PrivateRouteProps {
-//   role: string;
-// }
-
-// const PrivateRoute: React.FC<PrivateRouteProps> = ({ role }) => {
-//   const { user } = useSelector(selectAuth);
-
-//   if (!user) {
-//     return <Navigate to="/" />;
-//   }
-
-//   if (user.role !== role) {
-//     return <Navigate to="/not-authorized" />;
-//   }
-
-//   return <Outlet />;
-// };
-
-// export default PrivateRoute;
-
 
 import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
