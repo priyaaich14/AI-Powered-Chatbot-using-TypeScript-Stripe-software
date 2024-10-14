@@ -243,15 +243,13 @@ dotenv.config();
 
 const sessionClient = new dialogflow.SessionsClient();
 
-
-
 // Function to handle chat via HTTP (Dialogflow only)
 export const chatWithBotHttp = async (req: IAuthRequest, res: Response) => {
   console.log('Authenticated User:', req.user);
 
   try {
     const { message, sessionId } = req.body;
-    const userId = req.user?._id; // Ensure user authentication middleware populates this
+    const userId = req.user?.id; // Ensure user authentication middleware populates this
 
     if (!userId) {
       return res.status(400).json({ error: 'UserId is required for chat' });
@@ -268,19 +266,34 @@ export const chatWithBotHttp = async (req: IAuthRequest, res: Response) => {
       user?.name || 'Anonymous User'
     );
 
+    // Ensure that no double saving or response occurs for the user's message
+    if (!chatSession.messages.find(msg => msg.message === message)) {
+      chatSession.messages.push({
+        sender: user?.name || 'Anonymous User', // The user's name
+        senderType: 'user',
+        message: message,
+        timestamp: new Date()
+      });
+
+      // Save the user's message immediately before processing the bot's response
+      await chatSession.save();
+    }
+
     // Get the bot's response using Dialogflow
     const botReply = await processBotResponseWithDialogflow(message, chatSession.sessionId);
 
-    // Add the bot's reply to the chat session
-    chatSession.messages.push({
-      sender: 'DobbyBot', // Use the bot's name as the sender
-      senderType: 'Bot',  // Add senderType for technician message
-      message: botReply,
-      timestamp: new Date()
-    });
+    // Ensure the bot's reply is only added once
+    if (!chatSession.messages.find(msg => msg.message === botReply)) {
+      chatSession.messages.push({
+        sender: 'DobbyBot', // Use the bot's name as the sender
+        senderType: 'Bot',  // Add senderType for bot message
+        message: botReply,
+        timestamp: new Date()
+      });
 
-    // Save the updated chat session with both user and bot messages
-    await chatSession.save();
+      // Save the bot's message after adding it
+      await chatSession.save();
+    }
 
     // Return the bot's reply along with the session ID
     res.json({ reply: botReply, sessionId: chatSession.sessionId });
@@ -292,7 +305,6 @@ export const chatWithBotHttp = async (req: IAuthRequest, res: Response) => {
 };
 
 // Helper function to create or retrieve a chat session
-
 const getOrCreateChatSession = async (
   sessionId?: string,
   userId?: mongoose.Types.ObjectId,
@@ -305,32 +317,50 @@ const getOrCreateChatSession = async (
   let chatSession;
 
   if (!sessionId) {
+    // Get the count of previous sessions for this user
+    const previousSessionsCount = await ChatSession.countDocuments({ userId });
+    const newSessionNumber = previousSessionsCount + 1;  // Session number specific to this user
+
     const newSessionId = uuidv4();
     chatSession = new ChatSession({
       sessionId: newSessionId,
       userId,
+      sessionNumber: newSessionNumber,  // Assign session number specific to the user
       messages: [{ sender: userName || 'user', senderType: 'user', message, timestamp: new Date() }],
-      updatedAt: new Date(), // Set updatedAt on creation
+      updatedAt: new Date(),
+      status: 'open'
     });
   } else {
     chatSession = await ChatSession.findOne({ sessionId });
 
     if (!chatSession) {
+      const previousSessionsCount = await ChatSession.countDocuments({ userId });
+      const newSessionNumber = previousSessionsCount + 1;
+
       chatSession = new ChatSession({
         sessionId,
         userId,
+        sessionNumber: newSessionNumber,  // Ensure session number is assigned
         messages: [{ sender: userName || 'user', senderType: 'user', message, timestamp: new Date() }],
-        updatedAt: new Date(), // Set updatedAt on creation
+        updatedAt: new Date(),
+        status: 'open'
       });
     } else {
       chatSession.messages.push({ sender: userName || 'user', senderType: 'user', message, timestamp: new Date() });
-      chatSession.updatedAt = new Date(); // Update timestamp on message addition
+      chatSession.updatedAt = new Date();
+
+      // Reopen the session if it was previously closed
+      if (chatSession.status === 'closed') {
+        chatSession.status = 'open';
+      }
     }
   }
 
   await chatSession.save();
   return chatSession;
 };
+
+
 // Helper function to process the bot's response using Dialogflow
 const processBotResponseWithDialogflow = async (message: string, sessionId: string) => {
   try {
@@ -341,10 +371,10 @@ const processBotResponseWithDialogflow = async (message: string, sessionId: stri
     });
 
     const dialogflowReply = dialogflowResponse[0]?.queryResult?.fulfillmentText;
-    //return dialogflowReply || 'I could not understand that.';
-    const namedReply = `DobbyBot: ${dialogflowReply || 'I could not understand that.'}`;
-
-    return namedReply;
+    
+    //const namedReply = `DobbyBot: ${dialogflowReply || 'I could not understand that.'}`;
+    return dialogflowReply || 'I could not understand that.';
+    //return namedReply;
   } catch (error) {
     console.error('Error processing Dialogflow request:', error);
     throw new Error('Error processing chat with Dialogflow');
@@ -354,39 +384,116 @@ const processBotResponseWithDialogflow = async (message: string, sessionId: stri
 // Escalate chat to technician (No change here)
 
 export const escalateToTechnician = async (req: Request, res: Response) => {
-  const { chatId } = req.body; // This is now sessionId, not _id
+  const { chatId } = req.body;
 
   try {
-    // Find chat session by sessionId instead of _id
-    const chatSession = await ChatSession.findOne({ sessionId: chatId });
-    if (!chatSession) return res.status(404).json({ message: 'Chat session not found' });
+    console.log(`Escalating chat session with sessionId: ${chatId}`);
 
+    // Step 1: Find chat session by sessionId
+    const chatSession = await ChatSession.findOne({ sessionId: chatId });
+    if (!chatSession) {
+      return res.status(404).json({ message: 'Chat session not found' });
+    }
+    console.log('Chat session found:', chatSession);
+
+    // Step 2: Find available technician and populate userId
     const availableTechnician = await Technician.findOne({ available: true }).populate('userId');
-    if (!availableTechnician) return res.status(404).json({ message: 'No available technicians' });
+
+    if (!availableTechnician || !availableTechnician.userId) {
+      return res.status(500).json({ message: 'Technician details are not available' });
+    }
 
     const technicianName = (availableTechnician.userId as IUser).name;
 
+    // Step 3: Cast technicianId and chatSessionId to ObjectId
+    const technicianId = availableTechnician._id as mongoose.Types.ObjectId;
+    const chatSessionId = chatSession._id as mongoose.Types.ObjectId;
+
+    // Step 4: Update chat session with escalated technician
     chatSession.status = 'escalated';
-    chatSession.escalatedTo = availableTechnician._id as mongoose.Types.ObjectId;
+    chatSession.escalatedTo = technicianId;  // Casted to ObjectId
     chatSession.messages.push({
       sender: technicianName,
-      senderType: 'technician',  // Add senderType for technician message
+      senderType: 'technician',
       message: `Your chat has been escalated to technician: ${technicianName}`,
       timestamp: new Date(),
     });
 
     await chatSession.save();
-    availableTechnician.handledChats.push(chatSession._id as mongoose.Types.ObjectId);
+
+    // Step 5: Update technician's handledChats and mark unavailable
+    availableTechnician.handledChats.push(chatSessionId);  // Casted to ObjectId
     availableTechnician.available = false;
     await availableTechnician.save();
 
+    // Step 6: Return response to client
     res.json({ message: `Chat escalated to technician ${technicianName}` });
   } catch (error) {
+    console.error('Error escalating chat:', error);
     res.status(500).json({ error: 'Error escalating chat' });
   }
 };
+// // Fetch chat session
+// export const getChatSession = async (req: IAuthRequest, res: Response) => {
+//   const { chatId } = req.params;
+
+//   try {
+//     // Use `sessionId` instead of `_id`
+//     const chatSession = await ChatSession.findOne({ sessionId: chatId })
+//       .populate('escalatedTo', 'name')
+//       .populate('userId', 'name')
+//       .exec();
+
+//     if (!chatSession) {
+//       return res.status(404).json({ message: 'Chat session not found' });
+//     }
+
+//     const isAdminOrTechnician = req.user.role === 'admin' || req.user.role === 'technician';
+//     const isOwner = chatSession.userId && chatSession.userId.equals(req.user.id);
+
+//     if (!isAdminOrTechnician && !isOwner) {
+//       return res.status(403).json({ message: 'Access denied: You can only view your own chats.' });
+//     }
+
+//     const technician = chatSession.escalatedTo as IUser;
+//     const user = chatSession.userId as IUser;
+
+//     res.json({
+//       chatSession,
+//       userName: user ? user.name : 'Anonymous User',
+//       technicianName: technician ? technician.name : 'Technician',
+//       status: chatSession.status === 'closed' ? 'Chat closed due to inactivity' : 'open',
+//     });
+//   } catch (error) {
+//     res.status(500).json({ error: 'Error fetching chat session' });
+//   }
+// };
 
 
+// // Fetch all chat sessions (Admin and Technician only)
+
+// export const getAllChatSessions = async (req: IAuthRequest, res: Response) => {
+//   try {
+//     const isAdminOrTechnician = req.user.role === 'admin' || req.user.role === 'technician';
+//     if (!isAdminOrTechnician) {
+//       return res.status(403).json({ message: 'Access denied: Only admins and technicians can view all chats.' });
+//     }
+
+//     // Fetch chat sessions and exclude chats of deleted users
+//     const chatSessions = await ChatSession.find()
+//       .populate({
+//         path: 'userId',
+//         select: 'name',
+//         match: { _id: { $ne: null } }, // Only include sessions where the user exists
+//       })
+//       .populate('escalatedTo', 'name')
+//       .exec();
+
+//     res.json(chatSessions);
+//   } catch (error) {
+//     res.status(500).json({ error: 'Error fetching all chat sessions' });
+//   }
+// };
 // Fetch chat session
 export const getChatSession = async (req: IAuthRequest, res: Response) => {
   const { chatId } = req.params;
@@ -402,8 +509,8 @@ export const getChatSession = async (req: IAuthRequest, res: Response) => {
       return res.status(404).json({ message: 'Chat session not found' });
     }
 
-    const isAdminOrTechnician = req.user.role === 'admin' || req.user.role === 'technician';
-    const isOwner = chatSession.userId && chatSession.userId.equals(req.user._id);
+    const isAdminOrTechnician = req.user?.role === 'admin' || req.user?.role === 'technician';  // Add null checks for `req.user`
+    const isOwner = chatSession.userId && chatSession.userId.equals(req.user?.id);  // Add null checks for `req.user`
 
     if (!isAdminOrTechnician && !isOwner) {
       return res.status(403).json({ message: 'Access denied: You can only view your own chats.' });
@@ -416,24 +523,29 @@ export const getChatSession = async (req: IAuthRequest, res: Response) => {
       chatSession,
       userName: user ? user.name : 'Anonymous User',
       technicianName: technician ? technician.name : 'Technician',
+      status: chatSession.status === 'closed' ? 'Chat closed due to inactivity' : 'open',
     });
   } catch (error) {
     res.status(500).json({ error: 'Error fetching chat session' });
   }
 };
 
-
 // Fetch all chat sessions (Admin and Technician only)
 export const getAllChatSessions = async (req: IAuthRequest, res: Response) => {
   try {
-    const isAdminOrTechnician = req.user.role === 'admin' || req.user.role === 'technician';
+    const isAdminOrTechnician = req.user?.role === 'admin' || req.user?.role === 'technician';  // Add null checks for `req.user`
     if (!isAdminOrTechnician) {
       return res.status(403).json({ message: 'Access denied: Only admins and technicians can view all chats.' });
     }
 
+    // Fetch chat sessions and exclude chats of deleted users
     const chatSessions = await ChatSession.find()
+      .populate({
+        path: 'userId',
+        select: 'name',
+        match: { _id: { $ne: null } }, // Only include sessions where the user exists
+      })
       .populate('escalatedTo', 'name')
-      .populate('userId', 'name')
       .exec();
 
     res.json(chatSessions);
@@ -442,10 +554,9 @@ export const getAllChatSessions = async (req: IAuthRequest, res: Response) => {
   }
 };
 
-
-
+// get user chat History
 export const getUserChatHistory = async (req: IAuthRequest, res: Response) => {
-  const userId = req.user?._id; // Get the authenticated user's ID
+  const userId = req.user?.id; // Get the authenticated user's ID
 
   try {
     // Fetch all chat sessions where userId matches the authenticated user's ID
@@ -458,7 +569,10 @@ export const getUserChatHistory = async (req: IAuthRequest, res: Response) => {
       return res.status(404).json({ message: 'No chat history found for this user.' });
     }
 
-    res.json(userChats); // Return the user's chat history
+    res.json(userChats.map(chat => ({
+      ...chat.toObject(), // Send chat data
+      status: chat.status // Include chat session status
+    }))); // Return the user's chat history
   } catch (error) {
     console.error('Error fetching user chat history:', error);
     res.status(500).json({ error: 'Error fetching chat history' });

@@ -1,16 +1,21 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import User from '../models/User'
+import User , { IUser} from '../models/User'
 import Technician from '../models/Technician';
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 import mongoose from 'mongoose';
+import ChatSession from '../models/ChatSession'; // Import ChatSession model
+import Stripe from 'stripe'; // Make sure Stripe is imported
+
+const stripe = new Stripe('sk_test_51K8SLdSCl2fLeg6X0IxSZAlzhIQ33wNVRwtwisxgFMDoSNqIDQtP0okJrxRKWLJ3bcBQUYmOL9QKj2IMBcsXOcqG00Qaxdk5AS', {
+  apiVersion: '2020-08-27' as any, // Use the version shown in your Stripe dashboard
+});
 
 interface IAuthRequest extends Request {
   user?: any;
 }
-
 // Transporter for nodemailer
 const transporter = nodemailer.createTransport({
   service: 'gmail',
@@ -20,26 +25,35 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-
 export const registerUser = async (req: Request, res: Response) => {
   const { name, email, password, role } = req.body;
 
   try {
-    // Hash the password before saving it
+    // Check if the email already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ error: 'Email is already in use' });
+    }
+
+    // Hash the user's password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create a new user with the provided name, email, password, and role
+    // // Create a Stripe customer for the user
+    const stripeCustomer = await stripe.customers.create({
+      email,
+      name,
+    });
+
+    // Create a new user with the provided data and the stripeCustomerId
     const newUser = new User({
       name,
       email,
       password: hashedPassword,
       role,
+     stripeCustomerId: stripeCustomer.id, // Save Stripe customer ID
     });
-
-    // Save the user to the database
     await newUser.save();
 
-    // If the user is a technician, create a technician profile
     if (role === 'technician') {
       const newTechnician = new Technician({
         userId: newUser._id,
@@ -47,34 +61,83 @@ export const registerUser = async (req: Request, res: Response) => {
         handledChats: [],
       });
       await newTechnician.save();
+      console.log('Technician created:', newTechnician);
     }
 
-    // Generate a JWT token with user ID and role
+    // Generate a JWT token for the newly created user
     const token = jwt.sign({ id: newUser._id, role: newUser.role }, process.env.JWT_SECRET!, { expiresIn: '1h' });
 
-    // Return the token, userId, name, and email in the response
-    res.status(201).json({ token, user: { id: newUser._id, name: newUser.name, email: newUser.email, role: newUser.role } });
+    res.status(201).json({
+      token,
+      user: { id: newUser._id, name: newUser.name, email: newUser.email, role: newUser.role },
+    });
   } catch (error) {
+    console.error('Error during user registration:', error);
     res.status(500).json({ error: 'Error registering user' });
   }
 };
 
+const updateSubscriptionOnLogin = async (userId: string) => {
+  try {
+    const user = await User.findById(userId);
 
+    if (user && user.stripeCustomerId) {
+      // Always fetch subscriptions from Stripe
+      const subscriptions = await stripe.subscriptions.list({
+        customer: user.stripeCustomerId,
+        status: 'all',
+        limit: 1,
+      });
+
+      if (subscriptions.data.length > 0) {
+        const subscription = subscriptions.data[0];
+        user.subscriptionId = subscription.id;
+        user.subscriptionStatus = subscription.status as IUser['subscriptionStatus'];
+
+        // Save updated subscription data in MongoDB
+        await user.save();
+      } else {
+        console.warn(`No subscriptions found for customer ID: ${user.stripeCustomerId}`);
+      }
+    } else {
+      console.warn(`User does not have a Stripe customer ID or user not found.`);
+    }
+  } catch (error) {
+    console.error('Error updating subscription on login:', error);
+  }
+};
 
 export const loginUser = async (req: Request, res: Response) => {
   const { email, password } = req.body;
 
   try {
-    const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ message: 'User not found' });
+    const user = await User.findOne({ email }) as IUser;
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Invalid credentials' });
+    }
 
-    // Generate JWT token with user ID and role
-    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET!, { expiresIn: '1h' });
+    // Update subscription details on login
+    try {
+      await updateSubscriptionOnLogin(user._id.toString());
+    } catch (error) {
+      console.error('Subscription update failed during login, but continuing:', error);
+      // Optional: You could return a specific error message here if you want
+    }
 
-    // Return token and user object with the same structure as registration
+    // Generate JWT token
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      process.env.JWT_SECRET!,
+      { expiresIn: '1h' }
+    );
+
+    // Return user details and token
     res.json({
       token,
       user: {
@@ -82,50 +145,60 @@ export const loginUser = async (req: Request, res: Response) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        subscriptionId: user.subscriptionId,
+        subscriptionStatus: user.subscriptionStatus,
       },
     });
   } catch (error) {
+    console.error('Error logging in:', error);
     res.status(500).json({ error: 'Error logging in' });
   }
 };
 
 
-// User can delete their own account
+// Ensure chat history is removed when a user is deleted
 export const deleteOwnAccount = async (req: IAuthRequest, res: Response) => {
   try {
     if (!req.user) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    await User.findByIdAndDelete(req.user.id);
+    const userId = req.user.id;
 
-    res.json({ message: 'Your account has been successfully deleted' });
+    // Delete the user's account
+    await User.findByIdAndDelete(userId);
+
+    // Delete the user's chat sessions
+    await ChatSession.deleteMany({ userId });
+
+    res.json({ message: 'Your account and chat history have been successfully deleted' });
   } catch (error) {
-    res.status(500).json({ error: 'Error deleting account' });
+    res.status(500).json({ error: 'Error deleting account and chat history' });
   }
 };
 
-
-
-// Admin Delete Any User or Technician
+// Admin can delete any user and their associated chat history
 export const adminDeleteAccount = async (req: Request, res: Response) => {
   try {
-    const { userId } = req.params;  // Assuming the userId is passed as a parameter
+    const { userId } = req.params;
 
-    // Check if the account exists
     const userToDelete = await User.findById(userId);
     if (!userToDelete) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Delete the user
+    // Delete the user's account
     await User.findByIdAndDelete(userId);
 
-    res.json({ message: 'User account deleted successfully' });
+    // Delete the user's chat sessions
+    await ChatSession.deleteMany({ userId });
+
+    res.json({ message: 'User account and chat history deleted successfully' });
   } catch (error) {
-    res.status(500).json({ error: 'Error deleting account' });
+    res.status(500).json({ error: 'Error deleting account and chat history' });
   }
 };
+
 
 export const getAllUsers = async (req: Request, res: Response) => {
   try {
@@ -256,39 +329,26 @@ export const forgotPassword = async (req: Request, res: Response) => {
   }
 };
 
-// Add technician function (Admin only)
+
+// When adding a technician (Admin only)
 export const addTechnician = async (req: Request, res: Response) => {
   try {
-    const { userId } = req.body;  // Pass the technician's user ID
+    const { userId } = req.body;
 
-    // Check if user exists
     const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
+    if (!user) return res.status(404).json({ message: 'User not found' });
 
-    // Check if the user is already a technician
     if (user.role === 'technician') {
       return res.status(400).json({ message: 'User is already a technician' });
     }
 
-    // Check if technician profile already exists
-    const existingTechnician = await Technician.findOne({ userId });
-    if (existingTechnician) {
-      return res.status(400).json({ message: 'Technician profile already exists' });
-    }
-
-    // Create new technician profile
     const newTechnician = new Technician({
       userId: new mongoose.Types.ObjectId(userId),
       available: true,  // Mark technician as available
       handledChats: []
     });
 
-    // Save the technician profile
     await newTechnician.save();
-
-    // Update user's role to 'technician'
     user.role = 'technician';
     await user.save();
 

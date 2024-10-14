@@ -245,9 +245,10 @@ import { Request, Response } from 'express';
 import Stripe from 'stripe';
 import Subscription from '../models/Subscription';
 import { IAuthRequest } from '../middlewares/auth'; // Importing IAuthRequest from your authController
+import User,{IUser} from '../models/User'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-06-20', // Ensure you're using the correct Stripe API version
+const stripe = new Stripe('sk_test_51K8SLdSCl2fLeg6X0IxSZAlzhIQ33wNVRwtwisxgFMDoSNqIDQtP0okJrxRKWLJ3bcBQUYmOL9QKj2IMBcsXOcqG00Qaxdk5AS', {
+  apiVersion: '2020-08-27' as any, // Use the version shown in your Stripe dashboard
 });
 
 // Create Payment Method
@@ -270,86 +271,61 @@ export const createPaymentMethod = async (req: Request, res: Response) => {
   }
 };
 
-// Create a Subscription
-// export const createStripeSubscription = async (req: Request, res: Response) => {
-//   const { email, paymentMethodId, priceId, name } = req.body;
 
-//   try {
-//     // Create a customer in Stripe
-//     const customer = await stripe.customers.create({
-//       email,
-//       name,
-//       payment_method: paymentMethodId,
-//       invoice_settings: {
-//         default_payment_method: paymentMethodId,
-//       },
-//     });
-
-//     // Create a subscription for the customer
-//     const subscription = await stripe.subscriptions.create({
-//       customer: customer.id,
-//       items: [{ price: priceId }],
-//       expand: ['latest_invoice.payment_intent'],
-//     });
-
-//     // Check the payment intent, but we're assuming non-3DS cards, so we skip further action checks
-//     const latestInvoice = subscription.latest_invoice as Stripe.Invoice;
-//     const paymentIntent = latestInvoice.payment_intent as Stripe.PaymentIntent;
-
-//     // If no authentication is required, it will succeed here
-//     if (paymentIntent && paymentIntent.status === 'succeeded') {
-//       res.status(200).json({
-//         message: 'Subscription created successfully',
-//         subscription,
-//       });
-//     } else {
-//       res.status(200).json({
-//         message: 'Subscription created, but no immediate charge',
-//         subscription,
-//       });
-//     }
-//   } catch (error: any) {
-//     console.error('Error creating subscription:', error.message);
-//     res.status(500).json({ error: 'Error creating subscription', message: error.message });
-//   }
-// };
-
-// Create a Subscription
 export const createStripeSubscription = async (req: Request, res: Response) => {
-  const { email, paymentMethodId, priceId, name,phone } = req.body;
+  const { email, paymentMethodId, priceId, name, phone } = req.body;
 
   try {
-    // Create a customer in Stripe
-    const customer = await stripe.customers.create({
-      email,
-      name,
-      phone,
-      payment_method: paymentMethodId,
-      invoice_settings: {
-        default_payment_method: paymentMethodId,
-      },
-    });
+    const user = await User.findOne({ email });
 
-    // Create a subscription for the customer
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Prevent multiple subscriptions if already subscribed
+    if (user.subscriptionId) {
+      const existingSubscription = await stripe.subscriptions.retrieve(user.subscriptionId);
+      if (['active', 'incomplete'].includes(existingSubscription.status)) {
+        return res.status(400).json({ error: 'User is already subscribed' });
+      }
+    }
+
+    let customerId = user.stripeCustomerId;
+
+    // Reuse existing customer or create a new one
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email,
+        name,
+        phone,
+        payment_method: paymentMethodId,
+        invoice_settings: { default_payment_method: paymentMethodId },
+      });
+
+      customerId = customer.id;
+      user.stripeCustomerId = customerId;
+      await user.save(); // Save customerId to MongoDB
+    }
+
+    // Create subscription
     const subscription = await stripe.subscriptions.create({
-      customer: customer.id,
+      customer: customerId,
       items: [{ price: priceId }],
       expand: ['latest_invoice.payment_intent'],
-      payment_behavior:'default_incomplete', // Ensure subscription remains incomplete until payment is confirmed
+      payment_behavior: 'default_incomplete',
       payment_settings: {
-        payment_method_options: {
-          card: {
-            request_three_d_secure: 'automatic', // Set to automatic to minimize unnecessary 3DS
-          },
-        },
+        payment_method_options: { card: { request_three_d_secure: 'automatic' } },
       },
     });
 
-    // Check the payment intent
+    // Save subscription details to MongoDB
+    user.subscriptionId = subscription.id;
+    user.subscriptionStatus = subscription.status as IUser['subscriptionStatus'];;
+    await user.save();
+
     const latestInvoice = subscription.latest_invoice as Stripe.Invoice;
     const paymentIntent = latestInvoice.payment_intent as Stripe.PaymentIntent;
 
-    // Handle if payment requires additional action like 3DS
     if (paymentIntent && paymentIntent.status === 'requires_action') {
       return res.status(400).json({
         error: 'Payment requires further authentication.',
@@ -358,17 +334,15 @@ export const createStripeSubscription = async (req: Request, res: Response) => {
       });
     }
 
-    // Subscription creation successful without further actions
     res.status(200).json({
       message: 'Subscription created successfully',
       subscription,
     });
-  } catch (error: any) {
-    console.error('Error creating subscription:', error.message);
-    res.status(500).json({ error: 'Error creating subscription', message: error.message });
+  } catch (error) {
+          console.error('Error creating subscription:', (error as Error).message);
+         res.status(500).json({ error:'Error creating subscription', message:(error as Error).message});
   }
 };
-
 
 // Cancel a Subscription
 export const cancelStripeSubscription = async (req: Request, res: Response) => {
@@ -391,102 +365,7 @@ export const cancelStripeSubscription = async (req: Request, res: Response) => {
   }
 };
 
-// Get Subscription Details
-// export const getSubscriptionDetails = async (req: IAuthRequest, res: Response) => {
-//   try {
-//     const { subscriptionId } = req.params;
-
-//     // Check if the user is authenticated
-//     if (!req.user) {
-//       return res.status(401).json({ error: 'Unauthorized' });
-//     }
-
-//     // Fetch subscription details from Stripe
-//     const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-
-//     // Extract the customer ID from the subscription
-//     const customerId = subscription.customer as string;
-
-//     // Fetch customer details from Stripe using the customer ID
-//     const customer = await stripe.customers.retrieve(customerId);
-
-//     // Combine subscription and customer details
-//     res.status(200).json({
-//       subscription,
-//       customer, // This will include details like email, phone, etc.
-//     });
-//   } catch (error) {
-//     console.error('Error retrieving subscription:', error);
-//     res.status(500).json({ error: 'Error retrieving subscription' });
-//   }
-// };
-export const getSubscriptionDetails = async (req: IAuthRequest, res: Response) => {
-  try {
-    const { subscriptionId } = req.params;
-
-    // Check if the user is authenticated
-    if (!req.user) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    // Fetch subscription details from Stripe
-    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-
-    // Extract the customer ID from the subscription
-    const customerId = subscription.customer as string;
-
-    // Fetch customer details from Stripe using the customer ID
-    const customer = await stripe.customers.retrieve(customerId);
-
-    // Check if the subscription is expired based on current_period_end
-    const isExpired = new Date(subscription.current_period_end * 1000) < new Date();
-
-    // Combine subscription, customer, and status details
-    res.status(200).json({
-      subscription: {
-        ...subscription,
-        isExpired, // Custom flag to indicate if the subscription is expired
-      },
-      customer, // This will include details like email, phone, etc.
-      status: subscription.status, // Include Stripe status (e.g., "active", "canceled", etc.)
-    });
-  } catch (error) {
-    console.error('Error retrieving subscription:', error);
-    res.status(500).json({ error: 'Error retrieving subscription' });
-  }
-};
-
-// Handle Payment Intent Statuses (insufficient balance, card declined, etc.)
-export const handlePaymentIntent = async (req: IAuthRequest, res: Response) => {
-  const { paymentIntentId } = req.body;
-
-  try {
-    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-
-    switch (paymentIntent.status) {
-      case 'succeeded':
-        return res.status(200).json({ message: 'Payment successful', paymentIntent });
-
-      case 'requires_payment_method':
-        return res.status(400).json({ error: 'Payment failed, card declined' });
-
-      case 'requires_action':
-        return res.status(400).json({ error: 'Payment requires additional action' });
-
-      case 'canceled':
-        return res.status(400).json({ error: 'Payment canceled, insufficient balance' });
-
-      default:
-        return res.status(500).json({ error: 'Payment failed, unknown error' });
-    }
-  } catch (error) {
-    console.error('Error handling payment intent:', error);
-    res.status(500).json({ error: 'Error handling payment intent' });
-  }
-};
-
-// Get Payment Details
-
+ // Get Payment Details
 export const getPaymentDetails = async (req: IAuthRequest, res: Response) => {
   try {
     const { paymentId } = req.params;
@@ -518,3 +397,262 @@ export const getPaymentDetails = async (req: IAuthRequest, res: Response) => {
     res.status(500).json({ error: 'Error retrieving payment details' });
   }
 };
+
+export const getSubscriptionDetails = async (req: Request, res: Response) => {
+  const { sessionId } = req.params;
+
+  try {
+    // Case 1: Check if it's a Checkout Session (for new users who just completed the checkout)
+    if (sessionId.startsWith('cs_')) {  // Stripe checkout session IDs start with 'cs_'
+      const session = await stripe.checkout.sessions.retrieve(sessionId, {
+        expand: ['subscription'],
+      });
+
+      if (!session.subscription) {
+        return res.status(400).json({
+          error: 'No subscription found in the session',
+          message: 'The checkout process has not been completed yet.',
+        });
+      }
+
+      const subscription = session.subscription as Stripe.Subscription;
+
+      // Fetch customer details
+      const customerId = subscription.customer as string;
+      const customer = await stripe.customers.retrieve(customerId);
+
+      res.status(200).json({
+        subscription: {
+          id: subscription.id,
+          status: subscription.status,
+          currentPeriodEnd: subscription.current_period_end,
+        },
+        customer: {
+          email: (customer as Stripe.Customer).email,
+          name: (customer as Stripe.Customer).name,
+        },
+      });
+    }
+    // Case 2: Check if it's a Subscription ID (for returning users)
+    else if (sessionId.startsWith('sub_')) {  // Stripe subscription IDs start with 'sub_'
+      const subscription = await stripe.subscriptions.retrieve(sessionId);
+
+      if (!subscription) {
+        return res.status(404).json({
+          error: 'Subscription not found',
+          message: 'The subscription does not exist.',
+        });
+      }
+
+      // Fetch customer details using the customer ID from the subscription
+      const customerId = subscription.customer as string;
+      const customer = await stripe.customers.retrieve(customerId);
+
+      res.status(200).json({
+        subscription: {
+          id: subscription.id,
+          status: subscription.status,
+          currentPeriodEnd: subscription.current_period_end,
+        },
+        customer: {
+          email: (customer as Stripe.Customer).email,
+          name: (customer as Stripe.Customer).name,
+        },
+      });
+    }
+    // If neither a checkout session ID nor a subscription ID, return an error
+    else {
+      return res.status(400).json({
+        error: 'Invalid session or subscription ID',
+        message: 'The provided ID is not a valid checkout session or subscription ID.',
+      });
+    }
+  } catch (error) {
+    console.error('Error retrieving subscription details:', error);
+    res.status(500).json({ error: 'Error retrieving subscription details' });
+  }
+};
+
+
+export const handlePaymentIntent = async (req: IAuthRequest, res: Response) => {
+  const { paymentIntentId, paymentMethodId } = req.body;
+
+  try {
+    // Retrieve the payment intent
+    let paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+    // Attach the payment method to the payment intent
+    paymentIntent = await stripe.paymentIntents.update(paymentIntentId, {
+      payment_method: paymentMethodId,
+    });
+
+    // Confirm the payment intent
+    const confirmedIntent = await stripe.paymentIntents.confirm(paymentIntentId);
+
+    // Handle the different statuses of the confirmed payment intent
+    switch (confirmedIntent.status) {
+      case 'succeeded':
+        return res.status(200).json({ message: 'Payment successful', paymentIntent: confirmedIntent });
+      case 'requires_action':
+        return res.status(200).json({
+          requiresAction: true,
+          clientSecret: confirmedIntent.client_secret,
+          nextAction: confirmedIntent.next_action,
+        });
+      case 'requires_payment_method':
+        return res.status(400).json({ error: 'Payment failed, please try again with a different payment method' });
+      case 'canceled':
+        return res.status(400).json({ error: 'Payment canceled' });
+      default:
+        return res.status(500).json({ error: 'Payment failed, unknown error' });
+    }
+  } catch (error) {
+    const err = error as Error;
+    console.error('Error handling payment intent:', err.message);
+    res.status(500).json({ error: 'Error handling payment intent', details: err.message });
+  }
+};
+
+
+export const createCheckoutSession = async (req: Request, res: Response) => {
+  const { priceId, email, name, phone, address } = req.body;
+
+  try {
+    // Find the user by email in MongoDB
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Use existing Stripe customer if available
+    let customerId = user.stripeCustomerId;
+
+    if (!customerId) {
+      // If no Stripe customer exists, create a new one
+      const customer = await stripe.customers.create({
+        email: user.email,
+        name: name, // Use 'name' from req.body to comply with regulations
+        phone: phone,
+        address: address, // Add address to comply with export regulations
+      });
+      customerId = customer.id;
+
+      // Save the new stripeCustomerId in MongoDB
+      user.stripeCustomerId = customerId;
+      await user.save();
+    }
+
+    // Create the checkout session using the existing or newly created customer
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      mode: 'subscription',
+      customer: customerId, // Use the existing or newly created customer ID
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1,
+        },
+      ],
+      billing_address_collection: 'required', // Ensure billing address is collected
+      // Success and cancel URLs
+      success_url: `${process.env.FRONTEND_URL}/user/subscription/success?session_id={CHECKOUT_SESSION_ID}`, // New success URL that points to your frontend
+      cancel_url: `${process.env.FRONTEND_URL}/user/subscription/cancel`, // Frontend cancel URL
+    });
+
+    console.log('Stripe session ID:', session.id);
+    res.status(200).json({ sessionId: session.id });
+  } catch (error: any) {
+    console.error('Error creating Stripe Checkout session:', error.message);
+    res.status(500).json({ error: 'Failed to create session', message: error.message });
+  }
+};
+
+export const handleSubscriptionSuccess = async (req: Request, res: Response) => {
+  const { session_id } = req.query;
+
+  try {
+    // Retrieve the checkout session from Stripe using the session ID
+    const session = await stripe.checkout.sessions.retrieve(session_id as string, {
+      expand: ['subscription'],
+    });
+
+    const subscription = session.subscription;
+
+    if (!subscription) {
+      return res.status(400).json({ error: 'No subscription found' });
+    }
+
+    // Get the subscription ID and status
+    const subscriptionId = (subscription as any).id;
+    const subscriptionStatus = (subscription as any).status;
+
+    // Find the user in MongoDB by email
+    const user = await User.findOne({ email: session.customer_email });
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Update the user's subscriptionId and subscriptionStatus in MongoDB
+    user.subscriptionId = subscriptionId;
+    user.subscriptionStatus = subscriptionStatus;
+    await user.save();
+
+    res.status(200).json({
+      message: 'Subscription details updated successfully',
+      subscriptionId,
+      subscriptionStatus,
+    });
+  } catch (error: any) {
+    console.error('Error handling subscription success:', error.message);
+    res.status(500).json({ error: 'Error handling subscription success', message: error.message });
+  }
+};
+
+
+// export const stripeWebhookHandler = async (req: Request, res: Response) => {
+//   const sig = req.headers['stripe-signature'];
+//   const stripeWebhookSecret = 'whsec_TP92wCFGB2iYWVpgNJIMAftFZ1DwMoCp1';
+
+//   if (!stripeWebhookSecret) {
+//     console.error('Stripe Webhook Secret is missing or undefined.');
+//     return res.status(500).send('Webhook secret not configured.');
+//   }
+
+//   let event;
+
+//   try {
+//     event = stripe.webhooks.constructEvent(req.body, sig!, stripeWebhookSecret);
+
+//     // Listen for checkout.session.completed event
+//     if (event.type === 'checkout.session.completed') {
+//       const session = event.data.object as Stripe.Checkout.Session;
+//       const subscriptionId = session.subscription as string;  // Get the subscription ID
+//       const customerId = session.customer as string;  // Get customer ID
+
+//       console.log(`Subscription created: ${subscriptionId}, Customer: ${customerId}`);
+
+//       // Find the user associated with this Stripe customer ID
+//       const user = await User.findOne({ stripeCustomerId: customerId });
+
+//       if (user) {
+//         // Update user's subscription information
+//         user.subscriptionId = subscriptionId;
+//         user.subscriptionStatus = 'active'; // Mark subscription as active
+//         await user.save();
+
+//         console.log(`User subscription updated: ${user.email}`);
+//       } else {
+//         console.error('User with this customer ID not found');
+//       }
+
+//       res.status(200).json({ subscriptionId });
+//     }
+
+//     res.json({ received: true });
+//   } catch (err) {
+//     console.error(`Webhook error: ${err}`);
+//     res.status(400).send('Webhook Error');
+//   }
+// };

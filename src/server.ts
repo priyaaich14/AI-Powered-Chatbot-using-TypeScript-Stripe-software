@@ -6,28 +6,16 @@ import http from 'http';
 import { Server } from 'socket.io';
 import connectDB from './config/db';
 import { registerUser, loginUser,forgotPassword,resetPassword,updatePassword,updateEmail,adminDeleteAccount,deleteOwnAccount,getAllUsers,getAllTechnicians,addTechnician } from './controllers/authController';
-//import { chatWithBotHttp, chatWithBotWebSocket, escalateToTechnician, getChatSession, getAllChatSessions } from './controllers/chatController';
 import { chatWithBotHttp, escalateToTechnician, getChatSession, getAllChatSessions, chatWithBotWebSocket, getUserChatHistory } from './controllers/chatController';
-import { createPaymentMethod,createStripeSubscription, cancelStripeSubscription, getPaymentDetails, getSubscriptionDetails, handlePaymentIntent} from './controllers/paymentController';
+import { createPaymentMethod, createStripeSubscription, cancelStripeSubscription, getPaymentDetails, getSubscriptionDetails, handlePaymentIntent,createCheckoutSession,handleSubscriptionSuccess} from './controllers/paymentController';
 import { authenticateToken, authorizeRoles, authenticateTokenWebSocket } from './middlewares/auth';
-//import bodyParser from 'body-parser';
-//import { handleStripeWebhook } from './controllers/paymentController';
-//import { createPaymentMethod } from './controllers/paymentController';
-
+import path from 'path';
 import ChatSession from './models/ChatSession'; // Adjust the import path as necessary
 
-
-
-//import './types/express'
 dotenv.config();
 connectDB();
 
-
 const app = express();
-
-// Stripe webhook requires raw body parsing
-//app.post('/payment/stripe/webhook', express.raw({ type: 'application/json' }), handleStripeWebhook);
-
 app.use(express.json());
 app.use(cors());
 
@@ -120,8 +108,7 @@ app.get('/chats', authenticateToken, authorizeRoles(['admin', 'technician']), ge
 
 
 
-// Required for Stripe webhook (raw body)
-//app.post('/payment/stripe/webhook', bodyParser.raw({ type: 'application/json' }), handleStripeWebhook);
+
 //USING STRIPE_KEYS
 app.post('/payment/method', createPaymentMethod);
 //app.post('/payment/stripe/confirm', confirmPaymentIntent); 
@@ -129,19 +116,28 @@ app.post('/payment/stripe/create', authenticateToken,createStripeSubscription);
 app.post('/payment/stripe/cancel',authenticateToken, cancelStripeSubscription);
 app.post('/payment/stripe/confirm', authenticateToken, handlePaymentIntent);
 // Get subscription details
-app.get('/payment/subscription/:subscriptionId',authenticateToken, getSubscriptionDetails);
+
+app.get('/payment/subscription/:sessionId', authenticateToken, getSubscriptionDetails);
+
 // Get payment details
 app.get('/payment/:paymentId', authenticateToken, getPaymentDetails);
-// // Optional: Check for expired subscriptions
-// app.get('/payment/subscription/check-expiries', async (req, res) => {
-//   try {
-//     await checkSubscriptionExpiries();
-//     res.json({ message: 'Checked and updated expired subscriptions.' });
-//   } catch (error) {
-//     res.status(500).json({ error: 'Error checking subscription expiries' });
-//   }
-// });
 
+app.post('/payment/stripe/create-checkout-session',authenticateToken, createCheckoutSession);
+app.get('/payment/subscription-success', authenticateToken, handleSubscriptionSuccess);
+
+// Serve static assets if in production
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, 'client', 'build')));
+
+  app.get('*', (req, res) => {
+    res.sendFile(path.resolve(__dirname, 'client', 'build', 'index.html'));
+  });
+} else {
+  // Redirect non-API requests to React frontend in development
+  app.get('*', (req, res) => {
+    res.status(404).json({ message: 'API route not found' });
+  });
+}
 
 
 
