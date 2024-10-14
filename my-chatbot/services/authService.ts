@@ -3,6 +3,7 @@ import axios from 'axios';
 
 const API_URL = 'http://localhost:5000';
 
+
 // Set up axios interceptor to include the token in all requests
 axios.interceptors.request.use(
   (config) => {

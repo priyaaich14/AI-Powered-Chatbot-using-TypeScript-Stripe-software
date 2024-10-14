@@ -12,6 +12,9 @@ import NotAuthorizedPage from './components/Shared/NotAuthorizedPage.tsx';
 import ForgotPassword from './components/Auth/ForgotPassword.tsx';
 import ResetPassword from './components/Auth/ResetPassword.tsx';
 import NotFoundPage from './components/Shared/NotFoundPage.tsx';
+import SubscriptionPage from './components/Subscription/SubscriptionPage.tsx';
+import CheckoutPage from './components/Subscription/CheckoutPage.tsx';
+import SubscriptionSuccessPage from './components/Subscription/SubcriptionSuccessPage.tsx';
 
 const App: React.FC = () => {
   return (
@@ -36,6 +39,11 @@ const App: React.FC = () => {
           {/* User Route */}
           <Route path="/user" element={<PrivateRoute role="user" />}>
             <Route path="/user" element={<UserDashboard />} />
+
+          {/* Subscription-related routes inside the User context */}
+          <Route path="/user/subscription" element={<SubscriptionPage />} />
+            <Route path="/user/checkout" element={<CheckoutPage />} />
+            <Route path="/user/subscription/success" element={<SubscriptionSuccessPage />} />
           </Route>
 
           <Route path="/not-authorized" element={<NotAuthorizedPage />} />

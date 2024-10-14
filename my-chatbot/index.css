@@ -1,0 +1,212 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+.user-dashboard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative; /* Allow for absolute positioning of icons */
+}
+
+.dashboard-icons {
+  display: flex;
+  flex-direction: column; /* This will arrange icons vertically */
+  gap: 10px; /* Space between the icons */
+  position: absolute;
+  top: 10px; /* Position from the top of the container */
+  right: 20px; /* Position from the right of the container */
+}
+
+.settings-icon,
+.logout-icon {
+  cursor: pointer;
+  font-size: 20px; /* Adjust the size of the icons */
+}
+
+.settings-section {
+  margin-top: 20px;
+}
+
+.technician-dashboard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+
+.dashboard-icons {
+  position: absolute;
+  top: 10px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px; /* Space between icons */
+}
+
+.users-icon,
+.logout-icon {
+  cursor: pointer;
+  font-size: 24px; /* Size of the icons */
+}
+
+.user-list {
+  margin-top: 20px;
+}
+
+.admin-dashboard {
+  padding: 20px;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.icon-column {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 10px;
+  margin-right: 20px;
+}
+
+.logout-icon {
+  cursor: pointer;
+  font-size: 24px;
+  color: red;
+}
+
+.toggle-icon {
+  cursor: pointer;
+  font-size: 24px;
+  color: #007bff;
+}
+
+.center-title {
+  flex-grow: 1;
+  text-align: center;
+}
+
+.user-list, .technician-list {
+  margin-top: 20px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table th, table td {
+  padding: 10px;
+  text-align: left;
+  border: 1px solid #ddd;
+}
+
+table th {
+  background-color: #f4f4f4;
+}
+
+button {
+  padding: 5px 10px;
+  margin-right: 10px;
+  cursor: pointer;
+}
+
+button:hover {
+  background-color: #ddd;
+}
+.chat-interface {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+}
+
+.chat-history p {
+  margin: 0;
+}
+
+form {
+  margin-top: 10px;
+}
+.skeleton-loader {
+  animation: loading 1.5s infinite;
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  height: 1em;
+  margin-bottom: 0.5em;
+}
+
+.skeleton-line {
+  height: 1em;
+  margin-bottom: 0.5em;
+  background: #f0f0f0;
+}
+
+@keyframes loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+
+.checkout-form {
+  max-width: 500px;
+  margin: 0 auto;
+  padding: 20px;
+  background-color: #f9f9f9;
+  border-radius: 10px;
+  box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.label {
+  font-size: 14px;
+  margin-bottom: 5px;
+}
+
+.input-field {
+  width: 100%;
+  padding: 10px;
+  font-size: 16px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  margin-bottom: 10px;
+}
+
+.card-input {
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+}
+
+.submit-button,
+.cancel-button {
+  padding: 12px;
+  width: 100%;
+  background-color: #007bff;
+  color: white;
+  font-size: 16px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+
+.cancel-button {
+  background-color: #6c757d;
+}
+
+.submit-button:disabled {
+  background-color: #ccc;
+}
